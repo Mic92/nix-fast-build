@@ -22,6 +22,7 @@ class Options:
     options: list[str] = field(default_factory=list)
     systems: set[str] = field(default_factory=set)
     eval_max_memory_size: int = 4096
+    skip_cached: bool = False
     eval_workers: int = multiprocessing.cpu_count()
     max_jobs: int = 0
     retries: int = 0
@@ -80,6 +81,11 @@ def parse_args(args: list[str]) -> Options:
         help="Number of times to retry failed builds",
     )
     parser.add_argument(
+        "--skip-cached",
+        help="Skip builds that are already present in the binary cache (default: false)",
+        action="store_true",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Print verbose output",
@@ -101,6 +107,7 @@ def parse_args(args: list[str]) -> Options:
     systems = set(a.systems.split(","))
     return Options(
         flake=a.flake,
+        skip_cached=a.skip_cached,
         options=a.option,
         max_jobs=a.max_jobs,
         verbose=a.verbose,
@@ -125,6 +132,8 @@ def nix_eval_jobs(opts: Options) -> Iterator[subprocess.Popen[str]]:
             "--flake",
             opts.flake,
         ] + opts.options
+        if opts.skip_cached:
+            args.append("--check-cache-status")
         print("$ " + " ".join(args))
         with subprocess.Popen(args, text=True, stdout=subprocess.PIPE) as proc:
             try:
@@ -265,6 +274,9 @@ def run_builds(stack: ExitStack, opts: Options) -> int:
         attr = job.get("attr", "unknown-flake-attribute")
         if error:
             eval_error.append(EvalError(attr, error))
+            continue
+        is_cached = job.get("isCached", False)
+        if is_cached:
             continue
         system = job.get("system")
         if system and system not in opts.systems:
