@@ -1,10 +1,10 @@
 # nix-ci-build
 
-Combine the power of `nix-eval-jobs` with `nix-output-monitor` to supercharge your NixOS evaluation and building process.
+Combine the power of `nix-eval-jobs` with `nix-output-monitor` to supercharge your ci evaluation and building process.
 
 ## Why `nix-ci-build`?
 
-**Problem**: Evaluating and building numerous NixOS machines can be painfully slow.
+**Problem**: Evaluating and building big flakes i.e. with numerous NixOS machines can be painfully slow.
 
 **Our Solution**: `nix-ci-build` offers a seamless experience by evaluating and building your nix packages concurrently, drastically reducing the overall time.
 
