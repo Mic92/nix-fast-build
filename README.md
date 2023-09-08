@@ -13,7 +13,7 @@ Combine the power of `nix-eval-jobs` with `nix-output-monitor` to supercharge yo
 Under the hood:
 1. It leverages the output from `nix-eval-jobs` to evaluate flake attributes in parallel.
 2. For each flake attribute, a separate `nix-build` process is spawned.
-3. Lastly, `nix-output-monitor` is used to keep an eye on the output, ensuring everything goes smoothly.
+3. Lastly, `nix-output-monitor` to show the build progress nicely.
 
 ## Usage
 
