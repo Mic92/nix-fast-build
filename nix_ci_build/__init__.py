@@ -1,5 +1,6 @@
 import argparse
 import json
+import multiprocessing
 import os
 import subprocess
 import sys
@@ -20,6 +21,8 @@ class Options:
     flake: str = ""
     options: list[str] = field(default_factory=list)
     systems: set[str] = field(default_factory=set)
+    eval_max_memory_size: int = 4096
+    eval_workers: int = multiprocessing.cpu_count()
     max_jobs: int = 0
     retries: int = 0
     verbose: bool = False
@@ -27,9 +30,7 @@ class Options:
 
 def run_nix(args: list[str]) -> subprocess.CompletedProcess[str]:
     try:
-        proc = subprocess.run(
-            ["nix"] + args, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
+        proc = subprocess.run(["nix"] + args, text=True, capture_output=True)
     except FileNotFoundError:
         die("nix not found in PATH")
     return proc
@@ -83,6 +84,19 @@ def parse_args(args: list[str]) -> Options:
         action="store_true",
         help="Print verbose output",
     )
+    parser.add_argument(
+        "--eval-max-memory-size",
+        type=int,
+        default=4096,
+        help="Maximum memory size for nix-eval-jobs (in MiB) per worker. After the limit is reached, the worker is restarted.",
+    )
+    parser.add_argument(
+        "--eval-workers",
+        type=int,
+        default=multiprocessing.cpu_count(),
+        help="Number of evaluation threads spawned",
+    )
+
     a = parser.parse_args(args)
     systems = set(a.systems.split(","))
     return Options(
@@ -91,6 +105,8 @@ def parse_args(args: list[str]) -> Options:
         max_jobs=a.max_jobs,
         verbose=a.verbose,
         systems=systems,
+        eval_max_memory_size=a.eval_max_memory_size,
+        eval_workers=a.eval_workers,
     )
 
 
@@ -102,6 +118,10 @@ def nix_eval_jobs(opts: Options) -> Iterator[subprocess.Popen[str]]:
             "--gc-roots-dir",
             d,
             "--force-recurse",
+            "--max-memory-size",
+            str(opts.eval_max_memory_size),
+            "--workers",
+            str(opts.eval_workers),
             "--flake",
             opts.flake,
         ] + opts.options
@@ -204,7 +224,7 @@ class Pipe:
         self.read_file.close()
         self.write_file.close()
 
- 
+
 def stop_gracefully(proc: subprocess.Popen, timeout: int = 1) -> None:
     proc.terminate()
     try:
