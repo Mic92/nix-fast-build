@@ -27,6 +27,7 @@ class Options:
     max_jobs: int = 0
     retries: int = 0
     verbose: bool = False
+    copy_to: str | None = None
 
 
 def run_nix(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -86,6 +87,10 @@ def parse_args(args: list[str]) -> Options:
         action="store_true",
     )
     parser.add_argument(
+        "--copy-to",
+        help="Copy build results to the given path (passed to nix copy, i.e. file:///tmp/cache?compression=none)",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Print verbose output",
@@ -114,6 +119,7 @@ def parse_args(args: list[str]) -> Options:
         systems=systems,
         eval_max_memory_size=a.eval_max_memory_size,
         eval_workers=a.eval_workers,
+        copy_to=a.copy_to,
     )
 
 
@@ -168,6 +174,7 @@ def nix_build(
 class Build:
     attr: str
     drv_path: str
+    outputs: dict[str, str]
     proc: subprocess.Popen[str]
     retries: int
     rc: int | None = None
@@ -200,7 +207,7 @@ def drain_builds(
             print(f"retrying build {build.attr} [{build.retries + 1}/{opts.retries}]")
             builds.append(
                 create_build(
-                    build.attr, build.drv_path, stdout, stack, opts, build.retries + 1
+                    build.attr, build.drv_path, build.outputs, stdout, stack, opts, build.retries + 1
                 )
             )
         else:
@@ -211,13 +218,27 @@ def drain_builds(
 def create_build(
     attr: str,
     drv_path: str,
+    outputs: dict[str, str],
     stdout: IO[Any] | None,
     exit_stack: ExitStack,
     opts: Options,
     retries: int = 0,
 ) -> Build:
     nix_build_proc = exit_stack.enter_context(nix_build(drv_path + "^*", stdout, opts))
-    return Build(attr, drv_path, nix_build_proc, retries=retries)
+    if opts.copy_to:
+        if opts.verbose:
+            print(f"copying {attr} to {opts.copy_to}")
+        exit_stack.enter_context(
+            subprocess.Popen(
+                [
+                    "nix",
+                    "copy",
+                    "--to",
+                    opts.copy_to,
+                ] + list(outputs.values()),
+            )
+        )
+    return Build(attr, drv_path, outputs, nix_build_proc, retries=retries)
 
 
 class Pipe:
@@ -260,7 +281,7 @@ def run_builds(stack: ExitStack, opts: Options) -> int:
     pipe = stack.enter_context(Pipe())
     nom_proc: subprocess.Popen | None = None
     stdout = pipe.write_file
-    builds = []
+    builds : list[Build] = []
     for line in proc.stdout:
         if nom_proc is None:
             nom_proc = stack.enter_context(nix_output_monitor(pipe.read_file.fileno()))
@@ -290,7 +311,8 @@ def run_builds(stack: ExitStack, opts: Options) -> int:
         if drv_path in drv_paths:
             continue
         drv_paths.add(drv_path)
-        builds.append(create_build(attr, drv_path, stdout, stack, opts))
+        outputs = job.get("outputs", {})
+        builds.append(create_build(attr, drv_path, outputs, stdout, stack, opts))
 
     while builds:
         build_failures += drain_builds(builds, stdout, stack, opts)
