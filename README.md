@@ -32,10 +32,10 @@ Enjoy faster and more efficient NixOS builds with `nix-ci-build`!
 ## Reference
 
 ```console
-$ nix-ci-build --help
 usage: nix-ci-build [-h] [-f FLAKE] [-j MAX_JOBS] [--option OPTION]
                     [--systems SYSTEMS] [--retries RETRIES] [--skip-cached]
-                    [--verbose] [--eval-max-memory-size EVAL_MAX_MEMORY_SIZE]
+                    [--copy-to COPY_TO] [--verbose]
+                    [--eval-max-memory-size EVAL_MAX_MEMORY_SIZE]
                     [--eval-workers EVAL_WORKERS]
 
 options:
@@ -51,6 +51,8 @@ options:
   --retries RETRIES     Number of times to retry failed builds
   --skip-cached         Skip builds that are already present in the binary
                         cache (default: false)
+  --copy-to COPY_TO     Copy build results to the given path (passed to nix
+                        copy, i.e. file:///tmp/cache?compression=none)
   --verbose             Print verbose output
   --eval-max-memory-size EVAL_MAX_MEMORY_SIZE
                         Maximum memory size for nix-eval-jobs (in MiB) per
