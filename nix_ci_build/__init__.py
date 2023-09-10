@@ -20,7 +20,7 @@ def die(msg: str) -> NoReturn:
 @dataclass
 class Options:
     flake: str = ""
-    options: list[list[str]] = field(default_factory=list)
+    options: list[str] = field(default_factory=list)
     systems: set[str] = field(default_factory=set)
     eval_max_memory_size: int = 4096
     skip_cached: bool = False
@@ -116,10 +116,14 @@ def parse_args(args: list[str]) -> Options:
 
     a = parser.parse_args(args)
     systems = set(a.systems.split(","))
+
+    options = []
+    for name, value in a.option:
+        options.extend(["--option", name, value])
     return Options(
         flake=a.flake,
         skip_cached=a.skip_cached,
-        options=a.option,
+        options=options,
         max_jobs=a.max_jobs,
         verbose=a.verbose,
         systems=systems,
@@ -143,9 +147,7 @@ def nix_eval_jobs(opts: Options) -> Iterator[subprocess.Popen[str]]:
             str(opts.eval_workers),
             "--flake",
             opts.flake,
-        ]
-        for opt in opts.options:
-            args.extend(["--option", opt[0], opt[1]])
+        ] + opts.options
         if opts.skip_cached:
             args.append("--check-cache-status")
         print("$ " + " ".join(args))
