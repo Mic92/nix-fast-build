@@ -2,6 +2,7 @@ import argparse
 import json
 import multiprocessing
 import os
+import select
 import subprocess
 import sys
 import time
@@ -19,7 +20,7 @@ def die(msg: str) -> NoReturn:
 @dataclass
 class Options:
     flake: str = ""
-    options: list[str] = field(default_factory=list)
+    options: list[list[str]] = field(default_factory=list)
     systems: set[str] = field(default_factory=set)
     eval_max_memory_size: int = 4096
     skip_cached: bool = False
@@ -68,7 +69,12 @@ def parse_args(args: list[str]) -> Options:
         help="Maximum number of build jobs to run in parallel (0 for unlimited)",
     )
     parser.add_argument(
-        "--option", help="Nix option to set", action="append", default=[]
+        "--option",
+        help="Nix option to set",
+        action="append",
+        nargs=2,
+        metavar=("name", "value"),
+        default=[],
     )
     parser.add_argument(
         "--systems",
@@ -137,7 +143,9 @@ def nix_eval_jobs(opts: Options) -> Iterator[subprocess.Popen[str]]:
             str(opts.eval_workers),
             "--flake",
             opts.flake,
-        ] + opts.options
+        ]
+        for opt in opts.options:
+            args.extend(["--option", opt[0], opt[1]])
         if opts.skip_cached:
             args.append("--check-cache-status")
         print("$ " + " ".join(args))
@@ -207,7 +215,13 @@ def drain_builds(
             print(f"retrying build {build.attr} [{build.retries + 1}/{opts.retries}]")
             builds.append(
                 create_build(
-                    build.attr, build.drv_path, build.outputs, stdout, stack, opts, build.retries + 1
+                    build.attr,
+                    build.drv_path,
+                    build.outputs,
+                    stdout,
+                    stack,
+                    opts,
+                    build.retries + 1,
                 )
             )
         else:
@@ -235,7 +249,8 @@ def create_build(
                     "copy",
                     "--to",
                     opts.copy_to,
-                ] + list(outputs.values()),
+                ]
+                + list(outputs.values()),
             )
         )
     return Build(attr, drv_path, outputs, nix_build_proc, retries=retries)
@@ -265,7 +280,11 @@ def stop_gracefully(proc: subprocess.Popen, timeout: int = 1) -> None:
 
 @contextmanager
 def nix_output_monitor(fd: int) -> Iterator[subprocess.Popen]:
-    proc = subprocess.Popen(["nom"], stdin=fd)
+    # to avoid warnings in nom if no output is received
+    def wait_stdin() -> None:
+        select.select([fd], [], [])
+
+    proc = subprocess.Popen(["nom"], stdin=fd, preexec_fn=wait_stdin)
     try:
         yield proc
     finally:
@@ -281,7 +300,7 @@ def run_builds(stack: ExitStack, opts: Options) -> int:
     pipe = stack.enter_context(Pipe())
     nom_proc: subprocess.Popen | None = None
     stdout = pipe.write_file
-    builds : list[Build] = []
+    builds: list[Build] = []
     for line in proc.stdout:
         if nom_proc is None:
             nom_proc = stack.enter_context(nix_output_monitor(pipe.read_file.fileno()))
