@@ -282,11 +282,7 @@ def stop_gracefully(proc: subprocess.Popen, timeout: int = 1) -> None:
 
 @contextmanager
 def nix_output_monitor(fd: int) -> Iterator[subprocess.Popen]:
-    # to avoid warnings in nom if no output is received
-    def wait_stdin() -> None:
-        select.select([fd], [], [])
-
-    proc = subprocess.Popen(["nom"], stdin=fd, preexec_fn=wait_stdin)
+    proc = subprocess.Popen(["nom"], stdin=fd)
     try:
         yield proc
     finally:
@@ -304,10 +300,10 @@ def run_builds(stack: ExitStack, opts: Options) -> int:
     stdout = pipe.write_file
     builds: list[Build] = []
     for line in proc.stdout:
-        if nom_proc is None:
-            nom_proc = stack.enter_context(nix_output_monitor(pipe.read_file.fileno()))
         if opts.verbose:
             print(line, end="")
+        if nom_proc is None:
+            nom_proc = stack.enter_context(nix_output_monitor(pipe.read_file.fileno()))
         try:
             job = json.loads(line)
         except json.JSONDecodeError:
