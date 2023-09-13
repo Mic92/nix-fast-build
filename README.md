@@ -23,6 +23,12 @@ To get started, simply run:
 $ nix-ci-build
 ```
 
+or:
+
+```
+$ nix run github:Mic92/nix-ci-build
+```
+
 This command will concurrently evaluate and build the attributes `.#checks.$currentSystem`.
 
 ---
