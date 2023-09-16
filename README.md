@@ -11,6 +11,7 @@ Combine the power of `nix-eval-jobs` with `nix-output-monitor` to supercharge yo
 ## How Does It Work?
 
 Under the hood:
+
 1. It leverages the output from `nix-eval-jobs` to evaluate flake attributes in parallel.
 2. For each flake attribute, a separate `nix-build` process is spawned.
 3. Lastly, `nix-output-monitor` to show the build progress nicely.
@@ -38,10 +39,9 @@ Enjoy faster and more efficient NixOS builds with `nix-ci-build`!
 ## Reference
 
 ```console
-usage: nix-ci-build [-h] [-f FLAKE] [-j MAX_JOBS] [--option OPTION]
-                    [--systems SYSTEMS] [--retries RETRIES] [--skip-cached]
-                    [--copy-to COPY_TO] [--verbose]
-                    [--eval-max-memory-size EVAL_MAX_MEMORY_SIZE]
+usage: nix-ci-build [-h] [-f FLAKE] [-j MAX_JOBS] [--option name value] [--no-nom] [--systems SYSTEMS]
+                    [--retries RETRIES] [--remote REMOTE] [--no-download] [--skip-cached]
+                    [--copy-to COPY_TO] [--verbose] [--eval-max-memory-size EVAL_MAX_MEMORY_SIZE]
                     [--eval-workers EVAL_WORKERS]
 
 options:
@@ -49,21 +49,20 @@ options:
   -f FLAKE, --flake FLAKE
                         Flake url to evaluate/build (default: .#checks
   -j MAX_JOBS, --max-jobs MAX_JOBS
-                        Maximum number of build jobs to run in parallel (0 for
-                        unlimited)
-  --option OPTION       Nix option to set
-  --systems SYSTEMS     Comma-separated list of systems to build for (default:
-                        current system)
+                        Maximum number of build jobs to run in parallel (0 for unlimited)
+  --option name value   Nix option to set
+  --no-nom              Use nix-output-monitor to print build output (default: false)
+  --systems SYSTEMS     Comma-separated list of systems to build for (default: current system)
   --retries RETRIES     Number of times to retry failed builds
-  --skip-cached         Skip builds that are already present in the binary
-                        cache (default: false)
-  --copy-to COPY_TO     Copy build results to the given path (passed to nix
-                        copy, i.e. file:///tmp/cache?compression=none)
+  --remote REMOTE       Remote machine to build on
+  --no-download         Do not download build results from remote machine
+  --skip-cached         Skip builds that are already present in the binary cache (default: false)
+  --copy-to COPY_TO     Copy build results to the given path (passed to nix copy, i.e.
+                        file:///tmp/cache?compression=none)
   --verbose             Print verbose output
   --eval-max-memory-size EVAL_MAX_MEMORY_SIZE
-                        Maximum memory size for nix-eval-jobs (in MiB) per
-                        worker. After the limit is reached, the worker is
-                        restarted.
+                        Maximum memory size for nix-eval-jobs (in MiB) per worker. After the limit is
+                        reached, the worker is restarted.
   --eval-workers EVAL_WORKERS
                         Number of evaluation threads spawned
 ```
