@@ -592,7 +592,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     return 0
 
 
-async def main() -> None:
+async def async_main() -> None:
     nix_config = await get_nix_config()
     opts = parse_args(sys.argv[1:], nix_config)
     rc = 0
@@ -601,3 +601,7 @@ async def main() -> None:
             opts.flake_url = upload_sources(opts.remote_url, opts.flake_url)
         rc = await run(stack, opts)
     sys.exit(rc)
+
+
+def main() -> None:
+    asyncio.run(async_main())
