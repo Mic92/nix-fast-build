@@ -266,35 +266,53 @@ async def ensure_stop(
 
 
 @asynccontextmanager
-async def nix_eval_jobs(opts: Options) -> AsyncIterator[Process]:
-    with TemporaryDirectory() as d:
-        temp = d
+async def remote_temp_dir(remote: str) -> AsyncIterator[str]:
+    proc = await asyncio.create_subprocess_exec(
+        "ssh", remote, "--", "mktemp", "-d", stdout=subprocess.PIPE
+    )
+    assert proc.stdout is not None
+    line = await proc.stdout.readline()
+    tempdir = line.decode().strip()
+    rc = await proc.wait()
+    if rc != 0:
+        die(f"Failed to create temporary directory on remote machine {remote}: {rc}")
+    try:
+        yield tempdir
+    finally:
+        cmd = ["ssh", remote, "--", "rm", "-rf", tempdir]
+        print("$ " + shlex.join(cmd))
+        proc = await asyncio.create_subprocess_exec(*cmd)
+        await proc.wait()
 
-        if opts.remote:
-            # TODO: This is bad
-            temp = "/tmp/gc-roots"
 
-        args = [
-            "nix-eval-jobs",
-            "--gc-roots-dir",
-            temp,
-            "--force-recurse",
-            "--max-memory-size",
-            str(opts.eval_max_memory_size),
-            "--workers",
-            str(opts.eval_workers),
-            "--flake",
-            f"{opts.flake_url}#{opts.flake_fragment}",
-        ] + opts.options
-        if opts.skip_cached:
-            args.append("--check-cache-status")
-        if opts.remote:
-            args = nix_shell(["nixpkgs#nix-eval-jobs"]) + args
-        args = maybe_remote(args, opts)
-        print("$ " + shlex.join(args))
-        proc = await asyncio.create_subprocess_exec(*args, stdout=subprocess.PIPE)
-        async with ensure_stop(proc, args) as proc:
-            yield proc
+@asynccontextmanager
+async def nix_eval_jobs(stack: AsyncExitStack, opts: Options) -> AsyncIterator[Process]:
+    if opts.remote:
+        gc_root_dir = await stack.enter_async_context(remote_temp_dir(opts.remote))
+    else:
+        gc_root_dir = stack.enter_context(TemporaryDirectory())
+
+    args = [
+        "nix-eval-jobs",
+        "--gc-roots-dir",
+        gc_root_dir,
+        "--force-recurse",
+        "--max-memory-size",
+        str(opts.eval_max_memory_size),
+        "--workers",
+        str(opts.eval_workers),
+        "--flake",
+        f"{opts.flake_url}#{opts.flake_fragment}",
+    ] + opts.options
+    if opts.skip_cached:
+        args.append("--check-cache-status")
+    if opts.remote:
+        args = nix_shell(["nixpkgs#nix-eval-jobs"]) + args
+    args = maybe_remote(args, opts)
+    print("$ " + shlex.join(args))
+    proc = await asyncio.create_subprocess_exec(*args, stdout=subprocess.PIPE)
+    async with ensure_stop(proc, args) as proc:
+        yield proc
 
 
 @asynccontextmanager
@@ -515,7 +533,7 @@ async def report_progress(
 
 
 async def run(stack: AsyncExitStack, opts: Options) -> int:
-    eval_proc_future = stack.enter_async_context(nix_eval_jobs(opts))
+    eval_proc_future = stack.enter_async_context(nix_eval_jobs(stack, opts))
     pipe: Pipe | None = None
     output_monitor_future: Coroutine[None, None, Process] | None = None
     if opts.nom:
