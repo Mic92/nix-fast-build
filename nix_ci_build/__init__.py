@@ -50,7 +50,8 @@ class Options:
     retries: int = 0
     verbose: bool = False
     copy_to: str | None = None
-    nom: bool = False
+    nom: bool = True
+    download: bool = True
 
     @property
     def remote_url(self) -> None | str:
@@ -139,6 +140,12 @@ def parse_args(args: list[str], nix_config: dict[str, str]) -> Options:
         help="Remote machine to build on",
     )
     parser.add_argument(
+        "--no-download",
+        help="Do not download build results from remote machine",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--skip-cached",
         help="Skip builds that are already present in the binary cache (default: false)",
         action="store_true",
@@ -185,6 +192,7 @@ def parse_args(args: list[str], nix_config: dict[str, str]) -> Options:
         options=options,
         max_jobs=a.max_jobs,
         nom=not a.no_nom,
+        download=not a.no_download,
         verbose=a.verbose,
         systems=systems,
         eval_max_memory_size=a.eval_max_memory_size,
@@ -343,7 +351,7 @@ class Build:
         return await proc.wait()
 
     async def download(self, exit_stack: AsyncExitStack, opts: Options) -> int:
-        if not opts.remote_url:
+        if not opts.remote_url or not opts.download:
             return 0
         cmd = [
             "nix",
