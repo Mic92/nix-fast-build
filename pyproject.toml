@@ -13,7 +13,6 @@ classifiers = [
   "Environment :: Console",
   "Topic :: Utilities",
   "Intended Audience :: Developers",
-  "Programming Language :: Python :: 3.6",
 ]
 
 [project.urls]
@@ -58,7 +57,7 @@ exclude = '''
 '''
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_redundant_casts = true
 disallow_untyped_calls = true
 disallow_untyped_defs = true
