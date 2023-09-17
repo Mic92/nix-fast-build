@@ -5,6 +5,7 @@ import multiprocessing
 import os
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 from abc import ABC
@@ -326,14 +327,14 @@ def nix_shell(packages: list[str]) -> list[str]:
 
 @asynccontextmanager
 async def ensure_stop(
-    proc: Process, cmd: list[str], timeout: float = 3.0
+    proc: Process, cmd: list[str], timeout: float = 3.0, signal_no: int = signal.SIGTERM
 ) -> AsyncIterator[Process]:
     try:
         yield proc
     finally:
         if proc.returncode is not None:
             return
-        proc.terminate()
+        proc.send_signal(signal_no)
         try:
             await asyncio.wait_for(proc.wait(), timeout=timeout)
         except asyncio.TimeoutError:
@@ -396,7 +397,8 @@ async def nix_eval_jobs(stack: AsyncExitStack, opts: Options) -> AsyncIterator[P
 async def nix_output_monitor(fd: int, opts: Options) -> AsyncIterator[Process]:
     cmd = maybe_remote(nix_shell(["nixpkgs#nix-output-monitor"]) + ["nom"], opts)
     proc = await asyncio.create_subprocess_exec(*cmd, stdin=fd)
-    async with ensure_stop(proc, cmd) as proc:
+    # Haskell doesn't handle anything but SIGINT properly
+    async with ensure_stop(proc, cmd, signal_no=signal.SIGINT) as proc:
         yield proc
 
 
