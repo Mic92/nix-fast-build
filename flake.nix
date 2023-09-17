@@ -10,25 +10,32 @@
   };
 
   outputs = inputs@{ flake-parts, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } ({ lib, ... }: {
-      imports = [ ./treefmt.nix ];
-      systems = [
-        "aarch64-linux"
-        "x86_64-linux"
+    flake-parts.lib.mkFlake { inherit inputs; } ({ lib, ... }:
+      let
+        officialPlatforms = [
+          "aarch64-linux"
+          "x86_64-linux"
 
-        "x86_64-darwin"
-        "aarch64-darwin"
-      ];
-      perSystem = { pkgs, self', ... }: {
-        packages.nix-ci-builds = pkgs.callPackage ./default.nix { };
-        packages.default = self'.packages.nix-ci-builds;
+          "x86_64-darwin"
+          "aarch64-darwin"
+        ];
+      in
+      {
+        imports = [ ./treefmt.nix ];
+        systems = officialPlatforms ++ [ "riscv64-linux" "i686-linux" ];
+        perSystem = { pkgs, self', ... }: {
+          packages.nix-ci-builds = pkgs.callPackage ./default.nix {
+            # we don't want to compile ghc otherwise
+            nix-output-monitor = if lib.elem pkgs.hostPlatform.system officialPlatforms then pkgs.nix-output-monitor else null;
+          };
+          packages.default = self'.packages.nix-ci-builds;
 
-        checks =
-          let
-            packages = lib.mapAttrs' (n: lib.nameValuePair "package-${n}") self'.packages;
-            devShells = lib.mapAttrs' (n: lib.nameValuePair "devShell-${n}") self'.devShells;
-          in
-          packages // devShells;
-      };
-    });
+          checks =
+            let
+              packages = lib.mapAttrs' (n: lib.nameValuePair "package-${n}") self'.packages;
+              devShells = lib.mapAttrs' (n: lib.nameValuePair "devShell-${n}") self'.devShells;
+            in
+            packages // devShells;
+        };
+      });
 }

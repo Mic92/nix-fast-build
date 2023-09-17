@@ -192,8 +192,17 @@ async def parse_args(args: list[str]) -> Options:
     nix_config = await get_nix_config(a.remote)
     if a.max_jobs is None:
         a.max_jobs = int(nix_config.get("max-jobs", 0))
-    if a.no_nom is None and not a.remote:
-        a.no_nom = shutil.which("nom") is None
+    if a.no_nom is None:
+        if a.remote:
+            # only if we have an official binary cache, otherwise we need to build ghc...
+            a.no_nom = nix_config.get("system", "") not in [
+                "aarch64-darwin",
+                "x86_64-darwin",
+                "aarch64-linux",
+                "x86_64-linux",
+            ]
+        else:
+            a.no_nom = shutil.which("nom") is None
     if a.systems is None:
         systems = set([nix_config.get("system", "")])
     else:
