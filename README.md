@@ -40,9 +40,9 @@ Enjoy faster and more efficient NixOS builds with `nix-ci-build`!
 
 ```console
 usage: nix-ci-build [-h] [-f FLAKE] [-j MAX_JOBS] [--option name value] [--no-nom] [--systems SYSTEMS]
-                    [--retries RETRIES] [--remote REMOTE] [--no-download] [--skip-cached]
-                    [--copy-to COPY_TO] [--verbose] [--eval-max-memory-size EVAL_MAX_MEMORY_SIZE]
-                    [--eval-workers EVAL_WORKERS]
+                    [--retries RETRIES] [--remote REMOTE] [--always-upload-source] [--no-download]
+                    [--skip-cached] [--copy-to COPY_TO] [--verbose]
+                    [--eval-max-memory-size EVAL_MAX_MEMORY_SIZE] [--eval-workers EVAL_WORKERS]
 
 options:
   -h, --help            show this help message and exit
@@ -55,6 +55,9 @@ options:
   --systems SYSTEMS     Comma-separated list of systems to build for (default: current system)
   --retries RETRIES     Number of times to retry failed builds
   --remote REMOTE       Remote machine to build on
+  --always-upload-source
+                        Always upload sources to remote machine. This is needed if the remote machine cannot
+                        access all sources (default: false)
   --no-download         Do not download build results from remote machine
   --skip-cached         Skip builds that are already present in the binary cache (default: false)
   --copy-to COPY_TO     Copy build results to the given path (passed to nix copy, i.e.

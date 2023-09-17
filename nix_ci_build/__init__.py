@@ -42,6 +42,7 @@ class Options:
     flake_fragment: str = ""
     options: list[str] = field(default_factory=list)
     remote: str | None = None
+    always_upload_source: bool = False
     systems: set[str] = field(default_factory=set)
     eval_max_memory_size: int = 4096
     skip_cached: bool = False
@@ -140,6 +141,12 @@ def parse_args(args: list[str], nix_config: dict[str, str]) -> Options:
         help="Remote machine to build on",
     )
     parser.add_argument(
+        "--always-upload-source",
+        help="Always upload sources to remote machine. This is needed if the remote machine cannot access all sources (default: false)",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--no-download",
         help="Do not download build results from remote machine",
         action="store_true",
@@ -187,6 +194,7 @@ def parse_args(args: list[str], nix_config: dict[str, str]) -> Options:
     return Options(
         flake_url=flake_url,
         flake_fragment=flake_fragment,
+        always_upload_source=a.always_upload_source,
         remote=a.remote,
         skip_cached=a.skip_cached,
         options=options,
@@ -201,7 +209,66 @@ def parse_args(args: list[str], nix_config: dict[str, str]) -> Options:
     )
 
 
-def upload_sources(remote_url: str, flake_url: str) -> str:
+def nix_flake_metadata(flake_url: str) -> dict[str, Any]:
+    cmd = [
+        "nix",
+        "flake",
+        "metadata",
+        "--json",
+        flake_url,
+    ]
+    print("$ " + shlex.join(cmd))
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE)
+    if proc.returncode != 0:
+        die(
+            f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
+        )
+
+    try:
+        data = json.loads(proc.stdout)
+    except Exception as e:
+        die(
+            f"failed to parse output of {shlex.join(cmd)}: {e}\nGot: {proc.stdout.decode('utf-8', 'replace')}"
+        )
+    return data
+
+
+def is_path_input(node: dict[str, dict[str, str]]) -> bool:
+    locked = node.get("locked")
+    if not locked:
+        return False
+    return locked["type"] == "path" or locked.get("url", "").startswith("file://")
+
+
+def check_for_path_inputs(data: dict[str, Any]) -> bool:
+    for node in data["locks"]["nodes"].values():
+        if is_path_input(node):
+            return True
+    return False
+
+
+def upload_sources(remote_url: str, flake_url: str, always_upload_source: bool) -> str:
+    if not always_upload_source:
+        flake_data = nix_flake_metadata(flake_url)
+        url = flake_data["resolvedUrl"]
+        has_path_inputs = check_for_path_inputs(flake_data)
+        if not has_path_inputs and not is_path_input(flake_data):
+            # No need to upload sources, we can just build the flake url directly
+            # FIXME: this might fail for private repositories?
+            return url
+        if not has_path_inputs:
+            # Just copy the flake to the remote machine, we can substitute other inputs there.
+            path = flake_data["path"]
+            cmd = ["nix", "copy", "--to", remote_url, "--no-check-sigs", path]
+            print("$ " + shlex.join(cmd))
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE)
+            if proc.returncode != 0:
+                die(
+                    f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
+                )
+            return path
+
+    # Slow path: we need to upload all sources to the remote machine
     cmd = [
         "nix",
         "flake",
@@ -616,7 +683,9 @@ async def async_main() -> None:
     rc = 0
     async with AsyncExitStack() as stack:
         if opts.remote_url:
-            opts.flake_url = upload_sources(opts.remote_url, opts.flake_url)
+            opts.flake_url = upload_sources(
+                opts.remote_url, opts.flake_url, opts.always_upload_source
+            )
         rc = await run(stack, opts)
     sys.exit(rc)
 
