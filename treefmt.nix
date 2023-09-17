@@ -9,6 +9,7 @@
       projectRootFile = "flake.lock";
 
       programs.mypy.enable = true;
+      programs.deno.enable = true;
 
       settings.formatter = {
         nix = {
