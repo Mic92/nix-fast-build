@@ -9,7 +9,12 @@
       projectRootFile = "flake.lock";
 
       programs.mypy.enable = true;
-      programs.deno.enable = true;
+      programs.deno.enable = lib.elem pkgs.hostPlatform.system [
+        "aarch64-linux"
+        "x86_64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
+      ];
 
       settings.formatter = {
         nix = {
