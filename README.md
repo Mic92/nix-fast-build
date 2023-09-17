@@ -1,18 +1,22 @@
 # nix-ci-build
 
-Combine the power of `nix-eval-jobs` with `nix-output-monitor` to supercharge your ci evaluation and building process.
+Combine the power of `nix-eval-jobs` with `nix-output-monitor` to supercharge
+your ci evaluation and building process.
 
 ## Why `nix-ci-build`?
 
-**Problem**: Evaluating and building big flakes i.e. with numerous NixOS machines can be painfully slow.
+**Problem**: Evaluating and building big flakes i.e. with numerous NixOS
+machines can be painfully slow.
 
-**Our Solution**: `nix-ci-build` offers a seamless experience by evaluating and building your nix packages concurrently, drastically reducing the overall time.
+**Our Solution**: `nix-ci-build` offers a seamless experience by evaluating and
+building your nix packages concurrently, drastically reducing the overall time.
 
 ## How Does It Work?
 
 Under the hood:
 
-1. It leverages the output from `nix-eval-jobs` to evaluate flake attributes in parallel.
+1. It leverages the output from `nix-eval-jobs` to evaluate flake attributes in
+   parallel.
 2. For each flake attribute, a separate `nix-build` process is spawned.
 3. Lastly, `nix-output-monitor` to show the build progress nicely.
 
@@ -30,7 +34,8 @@ or:
 $ nix run github:Mic92/nix-ci-build
 ```
 
-This command will concurrently evaluate and build the attributes `.#checks.$currentSystem`.
+This command will concurrently evaluate and build the attributes
+`.#checks.$currentSystem`.
 
 ---
 
