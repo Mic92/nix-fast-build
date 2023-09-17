@@ -61,37 +61,38 @@ class Options:
         return f"ssh://{self.remote}"
 
 
-async def run_nix(args: list[str]) -> Process:
+def _maybe_remote(cmd: list[str], remote: str | None) -> list[str]:
+    if remote:
+        return ["ssh", remote, "--", shlex.join(cmd)]
+    else:
+        return cmd
+
+
+def maybe_remote(cmd: list[str], opts: Options) -> list[str]:
+    return _maybe_remote(cmd, opts.remote)
+
+
+async def get_nix_config(remote: str | None) -> dict[str, str]:
+    args = _maybe_remote(["nix", "show-config", "--json"], remote)
     try:
         proc = await asyncio.create_subprocess_exec(
-            "nix", *args, stdout=asyncio.subprocess.PIPE
+            *args, stdout=asyncio.subprocess.PIPE
         )
     except FileNotFoundError:
         die(f"nix not found in PATH, try to run {shlex.join(args)}")
-    return proc
 
+    stdout, _ = await proc.communicate()
+    if proc.returncode != 0:
+        die(f"Failed to get nix config: {proc.returncode}")
+    data = json.loads(stdout)
 
-async def get_nix_config() -> dict[str, str]:
-    proc = await run_nix(["show-config"])
-    assert proc.stdout is not None
     config = {}
-    async for line in proc.stdout:
-        cols = line.split(b" = ", 1)
-        if len(cols) != 2:
-            continue
-        key, value = cols
-        config[key.decode()] = value.decode().strip()
-    try:
-        returncode = await proc.wait()
-        if returncode != 0:
-            die(f"Failed to get nix config: {returncode}")
-    finally:
-        if proc.returncode is None:
-            proc.kill()
+    for key, value in data.items():
+        config[key] = value["value"]
     return config
 
 
-def parse_args(args: list[str], nix_config: dict[str, str]) -> Options:
+async def parse_args(args: list[str]) -> Options:
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -104,7 +105,7 @@ def parse_args(args: list[str], nix_config: dict[str, str]) -> Options:
         "-j",
         "--max-jobs",
         type=int,
-        default=nix_config.get("max-jobs", 0),
+        default=None,
         help="Maximum number of build jobs to run in parallel (0 for unlimited)",
     )
     parser.add_argument(
@@ -119,15 +120,12 @@ def parse_args(args: list[str], nix_config: dict[str, str]) -> Options:
         "--no-nom",
         help="Use nix-output-monitor to print build output (default: false)",
         action="store_true",
-        default=shutil.which("nom") is None,
+        default=None,
     )
-    system = nix_config.get("system")
-    if system is None:
-        die("Failed to determine system from nix config")
     parser.add_argument(
         "--systems",
         help="Comma-separated list of systems to build for (default: current system)",
-        default=system,
+        default=None,
     )
     parser.add_argument(
         "--retries",
@@ -180,7 +178,6 @@ def parse_args(args: list[str], nix_config: dict[str, str]) -> Options:
     )
 
     a = parser.parse_args(args)
-    systems = set(a.systems.split(","))
 
     flake_parts = a.flake.split("#")
     flake_url = flake_parts[0]
@@ -191,6 +188,17 @@ def parse_args(args: list[str], nix_config: dict[str, str]) -> Options:
     options = []
     for name, value in a.option:
         options.extend(["--option", name, value])
+
+    nix_config = await get_nix_config(a.remote)
+    if a.max_jobs is None:
+        a.max_jobs = int(nix_config.get("max-jobs", 0))
+    if a.no_nom is None and not a.remote:
+        a.no_nom = shutil.which("nom") is None
+    if a.systems is None:
+        systems = set([nix_config.get("system", "")])
+    else:
+        systems = set(a.systems.split(","))
+
     return Options(
         flake_url=flake_url,
         flake_fragment=flake_fragment,
@@ -290,13 +298,6 @@ def upload_sources(remote_url: str, flake_url: str, always_upload_source: bool) 
         die(
             f"failed to parse output of {shlex.join(cmd)}: {e}\nGot: {proc.stdout.decode('utf-8', 'replace')}"
         )
-
-
-def maybe_remote(cmd: list[str], opts: Options) -> list[str]:
-    if opts.remote:
-        return ["ssh", opts.remote, "--", shlex.join(cmd)]
-    else:
-        return cmd
 
 
 def nix_shell(packages: list[str]) -> list[str]:
@@ -678,8 +679,8 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
 
 
 async def async_main() -> None:
-    nix_config = await get_nix_config()
-    opts = parse_args(sys.argv[1:], nix_config)
+    opts = await parse_args(sys.argv[1:])
+
     rc = 0
     async with AsyncExitStack() as stack:
         if opts.remote_url:
