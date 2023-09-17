@@ -394,12 +394,20 @@ async def nix_eval_jobs(stack: AsyncExitStack, opts: Options) -> AsyncIterator[P
 
 
 @asynccontextmanager
-async def nix_output_monitor(fd: int, opts: Options) -> AsyncIterator[Process]:
+async def nix_output_monitor(pipe: Pipe, opts: Options) -> AsyncIterator[Process]:
     cmd = maybe_remote(nix_shell(["nixpkgs#nix-output-monitor"]) + ["nom"], opts)
-    proc = await asyncio.create_subprocess_exec(*cmd, stdin=fd)
-    # Haskell doesn't handle anything but SIGINT properly
-    async with ensure_stop(proc, cmd, signal_no=signal.SIGINT) as proc:
+    proc = await asyncio.create_subprocess_exec(*cmd, stdin=pipe.read_file)
+    try:
         yield proc
+    finally:
+        # nom doesn't properly handle signals, so we have to close its stdin to stop it
+        pipe.write_file.close()
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=3)
+        except asyncio.TimeoutError:
+            print(f"Failed to stop process {shlex.join(cmd)}. Killing it.")
+            proc.kill()
+            await proc.wait()
 
 
 @dataclass
@@ -618,7 +626,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     if opts.nom:
         pipe = stack.enter_context(Pipe())
         output_monitor_future = stack.enter_async_context(
-            nix_output_monitor(pipe.read_file.fileno(), opts)
+            nix_output_monitor(pipe, opts)
         )
     eval_proc = await eval_proc_future
     output_monitor: Process | None = None
@@ -703,4 +711,7 @@ async def async_main() -> None:
 
 
 def main() -> None:
-    asyncio.run(async_main())
+    try:
+        asyncio.run(async_main())
+    except KeyboardInterrupt:
+        pass # don't print a stack trace on Ctrl-C
