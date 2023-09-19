@@ -1,15 +1,21 @@
-# nix-fast-build
+# nix-fast-build 🚀 (previously known as nix-ci-build)
 
-Combine the power of `nix-eval-jobs` with `nix-output-monitor` to speed-up your ci evaluation and building process.
-(formally known as nix-ci-build)
+Combine the power of `nix-eval-jobs` with `nix-output-monitor` to speed-up your
+evaluation and building process. `nix-fast-build` an also integrates with remote
+machines by uploading the current flake, performing the evaluation/build
+remotely, and then transferring the resultant store paths back to you.
 
 ## Why `nix-fast-build`?
 
 **Problem**: Evaluating and building big flakes i.e. with numerous NixOS
-machines can be painfully slow.
+machines can be painfully slow. For instance, rebuilding the already-compiled
+[disko integration test suite](https://github.com/nix-community/disko) demands
+1:50 minutes on an AMD Ryzen 9 7950X3D. But, it only takes a
+[10 seconds](https://github.com/Mic92/nix-fast-build/issues/1) with
+`nix-fast-build`.
 
-**Our Solution**: `nix-fast-build` offers a seamless experience by evaluating and
-building your nix packages concurrently, drastically reducing the overall time.
+**Solution**: `nix-fast-build` makes builds faster by evaluating and building
+building your nix packages concurrently, reducing the overall time.
 
 ## How Does It Work?
 
@@ -17,12 +23,15 @@ Under the hood:
 
 1. It leverages the output from `nix-eval-jobs` to evaluate flake attributes in
    parallel.
-2. For each flake attribute, a separate `nix-build` process is spawned.
+2. As soon as attributes complete evaluation, `nix-fast-build` initiates their
+   build, even if the overall evaluation is ongoing.
 3. Lastly, `nix-output-monitor` to show the build progress nicely.
+4. (Optional) Once a build finishes, `nix-fast-build` can initiate its upload to
+   a designated remote binary cache.
 
 ## Usage
 
-To get started, simply run:
+To get started, run:
 
 ```console
 $ nix-fast-build
@@ -40,6 +49,24 @@ This command will concurrently evaluate and build the attributes
 ---
 
 Enjoy faster and more efficient NixOS builds with `nix-fast-build`!
+
+## Remote building
+
+When leveraging the remote-builder protocol, uploading pre-built paths or
+sources from the local machine can often turn into a bottleneck.
+`nix-fast-build` sidesteps this by uploading only the flake and executing all
+evaluation/build operations on the remote end. At the end `nix-ci-build`
+optionally will download the finished builds.
+
+Here is how to use it:
+
+```
+nix run github:Mic92/nix-ci-build -- --remote youruser@yoursshhostname
+```
+
+Replace `youruser@yoursshhostname` with your SSH login credentials for the
+target machine. Please note that as of now, you must be recognized as a trusted
+user on the remote endpoint to access this feature.
 
 ## Reference
 

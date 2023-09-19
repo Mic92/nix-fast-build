@@ -714,4 +714,4 @@ def main() -> None:
     try:
         asyncio.run(async_main())
     except KeyboardInterrupt:
-        pass # don't print a stack trace on Ctrl-C
+        pass  # don't print a stack trace on Ctrl-C
