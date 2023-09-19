@@ -19,7 +19,7 @@ classifiers = [
 Homepage = "https://github.com/Mic92/nix-fast-build"
 
 [project.scripts]
-nix-fast-build = "nix_ci_build:main"
+nix-fast-build = "nix_fast_build:main"
 
 [tool.setuptools.packages]
 find = {}

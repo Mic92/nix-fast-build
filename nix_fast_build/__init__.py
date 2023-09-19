@@ -697,8 +697,8 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     return 0
 
 
-async def async_main() -> None:
-    opts = await parse_args(sys.argv[1:])
+async def async_main(args: list[str]) -> None:
+    opts = await parse_args(args)
 
     rc = 0
     async with AsyncExitStack() as stack:
@@ -712,6 +712,6 @@ async def async_main() -> None:
 
 def main() -> None:
     try:
-        asyncio.run(async_main())
+        asyncio.run(async_main(sys.argv[1:]))
     except KeyboardInterrupt:
         pass  # don't print a stack trace on Ctrl-C
