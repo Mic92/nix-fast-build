@@ -3,7 +3,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nix-ci-build"
+name = "nix-fast-build"
 description = "Evaluate and build in parallel"
 version = "2.10.1"
 authors = [{ name = "Jörg Thalheim", email = "joerg@thalheim.io" }]
@@ -16,10 +16,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Mic92/nix-ci-build"
+Homepage = "https://github.com/Mic92/nix-fast-build"
 
 [project.scripts]
-nix-ci-build = "nix_ci_build:main"
+nix-fast-build = "nix_ci_build:main"
 
 [tool.setuptools.packages]
 find = {}

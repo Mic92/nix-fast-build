@@ -1,14 +1,14 @@
-# nix-ci-build
+# nix-fast-build
 
-Combine the power of `nix-eval-jobs` with `nix-output-monitor` to supercharge
-your ci evaluation and building process.
+Combine the power of `nix-eval-jobs` with `nix-output-monitor` to speed-up your ci evaluation and building process.
+(formally known as nix-ci-build)
 
-## Why `nix-ci-build`?
+## Why `nix-fast-build`?
 
 **Problem**: Evaluating and building big flakes i.e. with numerous NixOS
 machines can be painfully slow.
 
-**Our Solution**: `nix-ci-build` offers a seamless experience by evaluating and
+**Our Solution**: `nix-fast-build` offers a seamless experience by evaluating and
 building your nix packages concurrently, drastically reducing the overall time.
 
 ## How Does It Work?
@@ -25,13 +25,13 @@ Under the hood:
 To get started, simply run:
 
 ```console
-$ nix-ci-build
+$ nix-fast-build
 ```
 
 or:
 
 ```
-$ nix run github:Mic92/nix-ci-build
+$ nix run github:Mic92/nix-fast-build
 ```
 
 This command will concurrently evaluate and build the attributes
@@ -39,12 +39,12 @@ This command will concurrently evaluate and build the attributes
 
 ---
 
-Enjoy faster and more efficient NixOS builds with `nix-ci-build`!
+Enjoy faster and more efficient NixOS builds with `nix-fast-build`!
 
 ## Reference
 
 ```console
-usage: nix-ci-build [-h] [-f FLAKE] [-j MAX_JOBS] [--option name value] [--no-nom] [--systems SYSTEMS]
+usage: nix-fast-build [-h] [-f FLAKE] [-j MAX_JOBS] [--option name value] [--no-nom] [--systems SYSTEMS]
                     [--retries RETRIES] [--remote REMOTE] [--always-upload-source] [--no-download]
                     [--skip-cached] [--copy-to COPY_TO] [--verbose]
                     [--eval-max-memory-size EVAL_MAX_MEMORY_SIZE] [--eval-workers EVAL_WORKERS]

@@ -24,11 +24,11 @@
         imports = [ ./treefmt.nix ];
         systems = officialPlatforms ++ [ "riscv64-linux" "i686-linux" ];
         perSystem = { pkgs, self', ... }: {
-          packages.nix-ci-builds = pkgs.callPackage ./default.nix {
+          packages.nix-fast-builds = pkgs.callPackage ./default.nix {
             # we don't want to compile ghc otherwise
             nix-output-monitor = if lib.elem pkgs.hostPlatform.system officialPlatforms then pkgs.nix-output-monitor else null;
           };
-          packages.default = self'.packages.nix-ci-builds;
+          packages.default = self'.packages.nix-fast-builds;
 
           checks =
             let

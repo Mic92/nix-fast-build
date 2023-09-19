@@ -3,7 +3,7 @@ let
   path = lib.makeBinPath [ nix nix-eval-jobs nix-output-monitor ];
 in
 python311.pkgs.buildPythonApplication {
-  pname = "nix-ci-build";
+  pname = "nix-fast-build";
   version = "0.1.0";
   format = "pyproject";
   src = ./.;
