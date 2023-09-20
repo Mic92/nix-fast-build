@@ -43,6 +43,7 @@ class Options:
     flake_fragment: str = ""
     options: list[str] = field(default_factory=list)
     remote: str | None = None
+    remote_ssh_options: list[str] = field(default_factory=list)
     always_upload_source: bool = False
     systems: set[str] = field(default_factory=set)
     eval_max_memory_size: int = 4096
@@ -62,19 +63,23 @@ class Options:
         return f"ssh://{self.remote}"
 
 
-def _maybe_remote(cmd: list[str], remote: str | None) -> list[str]:
+def _maybe_remote(
+    cmd: list[str], remote: str | None, remote_ssh_options: list[str]
+) -> list[str]:
     if remote:
-        return ["ssh", remote, "--", shlex.join(cmd)]
+        return ["ssh", remote] + remote_ssh_options + ["--", shlex.join(cmd)]
     else:
         return cmd
 
 
 def maybe_remote(cmd: list[str], opts: Options) -> list[str]:
-    return _maybe_remote(cmd, opts.remote)
+    return _maybe_remote(cmd, opts.remote, opts.remote_ssh_options)
 
 
-async def get_nix_config(remote: str | None) -> dict[str, str]:
-    args = _maybe_remote(["nix", "show-config", "--json"], remote)
+async def get_nix_config(
+    remote: str | None, remote_ssh_options: list[str]
+) -> dict[str, str]:
+    args = _maybe_remote(["nix", "show-config", "--json"], remote, remote_ssh_options)
     try:
         proc = await asyncio.create_subprocess_exec(
             *args, stdout=asyncio.subprocess.PIPE
@@ -84,7 +89,9 @@ async def get_nix_config(remote: str | None) -> dict[str, str]:
 
     stdout, _ = await proc.communicate()
     if proc.returncode != 0:
-        die(f"Failed to get nix config: {proc.returncode}")
+        die(
+            f"Failed to get nix config, {shlex.join(args)} exited with {proc.returncode}"
+        )
     data = json.loads(stdout)
 
     config = {}
@@ -112,6 +119,14 @@ async def parse_args(args: list[str]) -> Options:
     parser.add_argument(
         "--option",
         help="Nix option to set",
+        action="append",
+        nargs=2,
+        metavar=("name", "value"),
+        default=[],
+    )
+    parser.add_argument(
+        "--remote-ssh-option",
+        help="ssh option when accessing remote",
         action="append",
         nargs=2,
         metavar=("name", "value"),
@@ -189,8 +204,11 @@ async def parse_args(args: list[str]) -> Options:
     options = []
     for name, value in a.option:
         options.extend(["--option", name, value])
+    remote_ssh_options = []
+    for name, value in a.remote_ssh_option:
+        remote_ssh_options.extend(["-o", f"{name}={value}"])
 
-    nix_config = await get_nix_config(a.remote)
+    nix_config = await get_nix_config(a.remote, remote_ssh_options)
     if a.max_jobs is None:
         a.max_jobs = int(nix_config.get("max-jobs", 0))
     if a.no_nom is None:
@@ -216,6 +234,7 @@ async def parse_args(args: list[str]) -> Options:
         remote=a.remote,
         skip_cached=a.skip_cached,
         options=options,
+        remote_ssh_options=remote_ssh_options,
         max_jobs=a.max_jobs,
         nom=not a.no_nom,
         download=not a.no_download,

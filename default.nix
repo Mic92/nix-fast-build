@@ -10,9 +10,11 @@ python311.pkgs.buildPythonApplication {
   buildInputs = with python311.pkgs; [
     setuptools
     bashInteractive
+  ];
+  nativeBuildInputs = [
+    makeWrapper
     python311.pkgs.pytest
   ];
-  nativeBuildInputs = [ makeWrapper ];
   preFixup = ''
     makeWrapperArgs+=(--prefix PATH : ${path})
   '';
