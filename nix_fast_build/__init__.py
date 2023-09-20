@@ -423,14 +423,14 @@ async def nix_output_monitor(pipe: Pipe, opts: Options) -> AsyncIterator[Process
     try:
         yield proc
     finally:
-        # nom doesn't properly handle signals, so we have to close its stdin to stop it
-        pipe.write_file.close()
+        # FIXME: show cursor again after nom messing it up (nom doesn't handle signals properly)
         try:
-            await asyncio.wait_for(proc.wait(), timeout=3)
-        except asyncio.TimeoutError:
-            print(f"Failed to stop process {shlex.join(cmd)}. Killing it.")
+            pipe.write_file.close()
+            pipe.read_file.close()
             proc.kill()
             await proc.wait()
+        finally:
+            print("\033[?25h")
 
 
 @dataclass
