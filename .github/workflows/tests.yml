@@ -22,8 +22,10 @@ jobs:
         github_access_token: ${{ secrets.GITHUB_TOKEN }}
         extra_nix_config: |
           accept-flake-config = true
-    - name: Self-test
-      run: nix run .
+    - name: Self-test (no-nom)
+      run: nix run . -- --no-nom
+    - name: Self-test (nom)
+      run: nix run . --
   tests:
     strategy:
       matrix:

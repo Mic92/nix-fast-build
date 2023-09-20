@@ -26,7 +26,11 @@
         perSystem = { pkgs, self', ... }: {
           packages.nix-fast-builds = pkgs.callPackage ./default.nix {
             # we don't want to compile ghc otherwise
-            nix-output-monitor = if lib.elem pkgs.hostPlatform.system officialPlatforms then pkgs.nix-output-monitor else null;
+            nix-output-monitor =
+              if lib.elem pkgs.hostPlatform.system officialPlatforms then
+                pkgs.nix-output-monitor
+              else
+                null;
           };
           packages.default = self'.packages.nix-fast-builds;
 
