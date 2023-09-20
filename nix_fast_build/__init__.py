@@ -284,9 +284,9 @@ def check_for_path_inputs(data: dict[str, Any]) -> bool:
     return False
 
 
-def upload_sources(remote_url: str, flake_url: str, always_upload_source: bool) -> str:
-    if not always_upload_source:
-        flake_data = nix_flake_metadata(flake_url)
+def upload_sources(opts: Options) -> str:
+    if not opts.always_upload_source:
+        flake_data = nix_flake_metadata(opts.flake_url)
         url = flake_data["resolvedUrl"]
         has_path_inputs = check_for_path_inputs(flake_data)
         if not has_path_inputs and not is_path_input(flake_data):
@@ -296,8 +296,7 @@ def upload_sources(remote_url: str, flake_url: str, always_upload_source: bool) 
         if not has_path_inputs:
             # Just copy the flake to the remote machine, we can substitute other inputs there.
             path = flake_data["path"]
-            cmd = ["nix", "copy", "--to", remote_url, "--no-check-sigs", path]
-            print("$ " + shlex.join(cmd))
+            cmd = ["nix", "copy", "--to", opts.remote_url, "--no-check-sigs", path]
             proc = subprocess.run(cmd, stdout=subprocess.PIPE)
             if proc.returncode != 0:
                 die(
@@ -311,9 +310,9 @@ def upload_sources(remote_url: str, flake_url: str, always_upload_source: bool) 
         "flake",
         "archive",
         "--to",
-        remote_url,
+        opts.remote_url,
         "--json",
-        flake_url,
+        opts.flake_url,
     ]
     print("$ " + shlex.join(cmd))
     proc = subprocess.run(cmd, stdout=subprocess.PIPE)
@@ -722,9 +721,7 @@ async def async_main(args: list[str]) -> None:
     rc = 0
     async with AsyncExitStack() as stack:
         if opts.remote_url:
-            opts.flake_url = upload_sources(
-                opts.remote_url, opts.flake_url, opts.always_upload_source
-            )
+            opts.flake_url = upload_sources(opts)
         rc = await run(stack, opts)
     sys.exit(rc)
 
