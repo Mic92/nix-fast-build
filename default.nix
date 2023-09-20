@@ -21,4 +21,11 @@ python311.pkgs.buildPythonApplication {
   shellHook = ''
     export PATH=${path}:$PATH
   '';
+  meta = {
+    description = "Combine the power of nix-eval-jobs with nix-output-monitor to speed-up your evaluation and building process.";
+    homepage = "https://github.com/Mic92/nix-fast-build";
+    license = lib.licenses.mit;
+    maintainers = with lib.maintainers; [ mic92 ];
+    mainProgram = "nix-fast-build";
+  };
 }

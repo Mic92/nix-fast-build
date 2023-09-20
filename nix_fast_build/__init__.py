@@ -284,9 +284,9 @@ def check_for_path_inputs(data: dict[str, Any]) -> bool:
     return False
 
 
-def upload_sources(remote_url: str, flake_url: str, always_upload_source: bool) -> str:
-    if not always_upload_source:
-        flake_data = nix_flake_metadata(flake_url)
+def upload_sources(opts: Options) -> str:
+    if not opts.always_upload_source:
+        flake_data = nix_flake_metadata(opts.flake_url)
         url = flake_data["resolvedUrl"]
         has_path_inputs = check_for_path_inputs(flake_data)
         if not has_path_inputs and not is_path_input(flake_data):
@@ -296,9 +296,10 @@ def upload_sources(remote_url: str, flake_url: str, always_upload_source: bool) 
         if not has_path_inputs:
             # Just copy the flake to the remote machine, we can substitute other inputs there.
             path = flake_data["path"]
-            cmd = ["nix", "copy", "--to", remote_url, "--no-check-sigs", path]
-            print("$ " + shlex.join(cmd))
-            proc = subprocess.run(cmd, stdout=subprocess.PIPE)
+            env = os.environ.copy()
+            env["NIX_SSHOPTS"] = " ".join(opts.remote_ssh_options)
+            cmd = ["nix", "copy", "--to", opts.remote_url, "--no-check-sigs", path]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, env=env)
             if proc.returncode != 0:
                 die(
                     f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
@@ -311,9 +312,9 @@ def upload_sources(remote_url: str, flake_url: str, always_upload_source: bool) 
         "flake",
         "archive",
         "--to",
-        remote_url,
+        opts.remote_url,
         "--json",
-        flake_url,
+        opts.flake_url,
     ]
     print("$ " + shlex.join(cmd))
     proc = subprocess.run(cmd, stdout=subprocess.PIPE)
@@ -363,20 +364,23 @@ async def ensure_stop(
 
 
 @asynccontextmanager
-async def remote_temp_dir(remote: str) -> AsyncIterator[str]:
-    proc = await asyncio.create_subprocess_exec(
-        "ssh", remote, "--", "mktemp", "-d", stdout=subprocess.PIPE
-    )
+async def remote_temp_dir(opts: Options) -> AsyncIterator[str]:
+    assert opts.remote
+    ssh_cmd = ["ssh", opts.remote] + opts.remote_ssh_options + ["--"]
+    cmd = ssh_cmd + ["mktemp", "-d"]
+    proc = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.PIPE)
     assert proc.stdout is not None
     line = await proc.stdout.readline()
     tempdir = line.decode().strip()
     rc = await proc.wait()
     if rc != 0:
-        die(f"Failed to create temporary directory on remote machine {remote}: {rc}")
+        die(
+            f"Failed to create temporary directory on remote machine {opts.remote}: {rc}"
+        )
     try:
         yield tempdir
     finally:
-        cmd = ["ssh", remote, "--", "rm", "-rf", tempdir]
+        cmd = ssh_cmd + ["rm", "-rf", tempdir]
         print("$ " + shlex.join(cmd))
         proc = await asyncio.create_subprocess_exec(*cmd)
         await proc.wait()
@@ -385,7 +389,7 @@ async def remote_temp_dir(remote: str) -> AsyncIterator[str]:
 @asynccontextmanager
 async def nix_eval_jobs(stack: AsyncExitStack, opts: Options) -> AsyncIterator[Process]:
     if opts.remote:
-        gc_root_dir = await stack.enter_async_context(remote_temp_dir(opts.remote))
+        gc_root_dir = await stack.enter_async_context(remote_temp_dir(opts))
     else:
         gc_root_dir = stack.enter_context(TemporaryDirectory())
 
@@ -488,7 +492,9 @@ class Build:
         ] + list(self.outputs.values())
         if opts.verbose:
             print("$ " + shlex.join(cmd))
-        proc = await asyncio.create_subprocess_exec(*cmd)
+        env = os.environ.copy()
+        env["NIX_SSHOPTS"] = " ".join(opts.remote_ssh_options)
+        proc = await asyncio.create_subprocess_exec(*cmd, env=env)
         await exit_stack.enter_async_context(ensure_stop(proc, cmd))
         return await proc.wait()
 
@@ -722,9 +728,7 @@ async def async_main(args: list[str]) -> None:
     rc = 0
     async with AsyncExitStack() as stack:
         if opts.remote_url:
-            opts.flake_url = upload_sources(
-                opts.remote_url, opts.flake_url, opts.always_upload_source
-            )
+            opts.flake_url = upload_sources(opts)
         rc = await run(stack, opts)
     sys.exit(rc)
 
