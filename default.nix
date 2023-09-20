@@ -7,8 +7,14 @@ python311.pkgs.buildPythonApplication {
   version = "0.1.0";
   format = "pyproject";
   src = ./.;
-  buildInputs = with python311.pkgs; [ setuptools bashInteractive ];
-  nativeBuildInputs = [ makeWrapper ];
+  buildInputs = with python311.pkgs; [
+    setuptools
+    bashInteractive
+  ];
+  nativeBuildInputs = [
+    makeWrapper
+    python311.pkgs.pytest
+  ];
   preFixup = ''
     makeWrapperArgs+=(--prefix PATH : ${path})
   '';

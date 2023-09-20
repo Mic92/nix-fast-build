@@ -19,7 +19,7 @@ classifiers = [
 Homepage = "https://github.com/Mic92/nix-fast-build"
 
 [project.scripts]
-nix-fast-build = "nix_ci_build:main"
+nix-fast-build = "nix_fast_build:main"
 
 [tool.setuptools.packages]
 find = {}
@@ -70,3 +70,6 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "pytest.*"
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+pythonpath = [ "." ]
