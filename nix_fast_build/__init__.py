@@ -660,12 +660,13 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     upload_queue: Queue[Build] = Queue()
     download_queue: Queue[Build] = Queue()
 
-    evaluation = run_evaluation(eval_proc, build_queue, failures[EvalFailure], opts)
     async with TaskGroup() as tg:
+        tasks = []
+        tasks.append(tg.create_task(run_evaluation(eval_proc, build_queue, failures[EvalFailure], opts)))
+        evaluation = tasks[0]
         build_output = sys.stdout.buffer
         if pipe:
             build_output = pipe.write_file
-        tasks = []
         logger.debug("Starting %d build tasks", opts.max_jobs)
         for _ in range(opts.max_jobs):
             tasks.append(
@@ -700,6 +701,8 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                     report_progress(build_queue, upload_queue, download_queue)
                 )
             )
+        logger.debug("Waiting for nix-eval to finish...")
+        await eval_proc.wait()
         logger.debug("Waiting for evaluation to finish...")
         await evaluation
         logger.debug("Evaluation finished, waiting for builds to finish...")
