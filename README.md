@@ -81,6 +81,16 @@ To make output more concise for CI environments, use the `--no-nom` flag. This
 replaces `nom` with a streamlined status reporter, which updates only when
 there's a change in the number of pending builds, uploads, or downloads.
 
+## Avoiding Redundant Package Downloads
+
+By default, `nix build` will download pre-built packages, leading to needless
+downloads even when there are no changes to any package. This can be especially
+burdensome for CI environments without a persistent Nix store, such as GitHub
+Actions.
+
+To optimize this, use the `--skip-cached` flag with `nix-fast-build`. This
+ensures that only those packages missing from the binary caches will be built.
+
 ## Reference
 
 ```console
