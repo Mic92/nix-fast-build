@@ -705,9 +705,14 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     upload_queue: QueueWithContext[Build | StopTask] = QueueWithContext()
     download_queue: QueueWithContext[Build | StopTask] = QueueWithContext()
 
-    evaluation = run_evaluation(eval_proc, build_queue, failures[EvalFailure], opts)
     async with TaskGroup() as tg:
         tasks = []
+        tasks.append(
+            tg.create_task(
+                run_evaluation(eval_proc, build_queue, failures[EvalFailure], opts)
+            )
+        )
+        evaluation = tasks[0]
         build_output = sys.stdout.buffer
         if pipe:
             build_output = pipe.write_file
