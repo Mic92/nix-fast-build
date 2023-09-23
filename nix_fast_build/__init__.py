@@ -40,6 +40,10 @@ class Pipe:
         self.write_file.close()
 
 
+def nix_command(args: list[str]) -> list[str]:
+    return ["nix", "--experimental-features", "nix-command flakes"] + args
+
+
 @dataclass
 class Options:
     flake_url: str = ""
@@ -82,7 +86,9 @@ def maybe_remote(cmd: list[str], opts: Options) -> list[str]:
 async def get_nix_config(
     remote: str | None, remote_ssh_options: list[str]
 ) -> dict[str, str]:
-    args = _maybe_remote(["nix", "show-config", "--json"], remote, remote_ssh_options)
+    args = _maybe_remote(
+        nix_command(["show-config", "--json"]), remote, remote_ssh_options
+    )
     try:
         proc = await asyncio.create_subprocess_exec(
             *args, stdout=asyncio.subprocess.PIPE
@@ -250,13 +256,14 @@ async def parse_args(args: list[str]) -> Options:
 
 
 def nix_flake_metadata(flake_url: str) -> dict[str, Any]:
-    cmd = [
-        "nix",
-        "flake",
-        "metadata",
-        "--json",
-        flake_url,
-    ]
+    cmd = nix_command(
+        [
+            "flake",
+            "metadata",
+            "--json",
+            flake_url,
+        ]
+    )
     logger.info("run %s", cmd)
     proc = subprocess.run(cmd, stdout=subprocess.PIPE)
     if proc.returncode != 0:
@@ -301,7 +308,16 @@ def upload_sources(opts: Options) -> str:
             path = flake_data["path"]
             env = os.environ.copy()
             env["NIX_SSHOPTS"] = " ".join(opts.remote_ssh_options)
-            cmd = ["nix", "copy", "--to", opts.remote_url, "--no-check-sigs", path]
+            assert opts.remote_url
+            cmd = nix_command(
+                [
+                    "copy",
+                    "--to",
+                    opts.remote_url,
+                    "--no-check-sigs",
+                    path,
+                ]
+            )
             proc = subprocess.run(cmd, stdout=subprocess.PIPE, env=env)
             if proc.returncode != 0:
                 die(
@@ -310,15 +326,17 @@ def upload_sources(opts: Options) -> str:
             return path
 
     # Slow path: we need to upload all sources to the remote machine
-    cmd = [
-        "nix",
-        "flake",
-        "archive",
-        "--to",
-        opts.remote_url,
-        "--json",
-        opts.flake_url,
-    ]
+    assert opts.remote_url
+    cmd = nix_command(
+        [
+            "flake",
+            "archive",
+            "--to",
+            opts.remote_url,
+            "--json",
+            opts.flake_url,
+        ]
+    )
     print("run " + shlex.join(cmd))
     logger.info("run %s", shlex.join(cmd))
     proc = subprocess.run(cmd, stdout=subprocess.PIPE)
@@ -335,9 +353,8 @@ def upload_sources(opts: Options) -> str:
 
 
 def nix_shell(packages: list[str]) -> list[str]:
-    return (
+    return nix_command(
         [
-            "nix",
             "shell",
             "--extra-experimental-features",
             "nix-command",
@@ -461,7 +478,7 @@ class Build:
     async def nix_copy(
         self, args: list[str], exit_stack: AsyncExitStack, opts: Options
     ) -> int:
-        cmd = maybe_remote(["nix", "copy", "--log-format", "raw"] + args, opts)
+        cmd = maybe_remote(nix_command(["copy", "--log-format", "raw"] + args), opts)
         logger.debug("run %s", shlex.join(cmd))
         proc = await asyncio.create_subprocess_exec(*cmd)
         await exit_stack.enter_async_context(ensure_stop(proc, cmd))
@@ -470,8 +487,9 @@ class Build:
     async def upload(self, exit_stack: AsyncExitStack, opts: Options) -> int:
         if not opts.copy_to:
             return 0
-        cmd = ["nix", "copy", "--log-format", "raw", "--to", opts.copy_to] + list(
-            self.outputs.values()
+        cmd = nix_command(
+            ["copy", "--log-format", "raw", "--to", opts.copy_to]
+            + list(self.outputs.values())
         )
         cmd = maybe_remote(cmd, opts)
         logger.debug("run %s", shlex.join(cmd))
@@ -482,15 +500,17 @@ class Build:
     async def download(self, exit_stack: AsyncExitStack, opts: Options) -> int:
         if not opts.remote_url or not opts.download:
             return 0
-        cmd = [
-            "nix",
-            "copy",
-            "--log-format",
-            "raw",
-            "--no-check-sigs",
-            "--from",
-            opts.remote_url,
-        ] + list(self.outputs.values())
+        cmd = nix_command(
+            [
+                "copy",
+                "--log-format",
+                "raw",
+                "--no-check-sigs",
+                "--from",
+                opts.remote_url,
+            ]
+            + list(self.outputs.values())
+        )
         logger.debug("run %s", shlex.join(cmd))
         env = os.environ.copy()
         env["NIX_SSHOPTS"] = " ".join(opts.remote_ssh_options)
@@ -544,14 +564,16 @@ class QueueWithContext(Queue[T]):
 async def nix_build(
     installable: str, stderr: IO[Any] | None, opts: Options
 ) -> AsyncIterator[Process]:
-    args = [
-        "nix",
-        "build",
-        installable,
-        "--log-format",
-        "raw",
-        "--keep-going",
-    ] + opts.options
+    args = nix_command(
+        [
+            "build",
+            installable,
+            "--log-format",
+            "raw",
+            "--keep-going",
+        ]
+        + opts.options
+    )
     args = maybe_remote(args, opts)
     logger.debug("run %s", shlex.join(args))
     proc = await asyncio.create_subprocess_exec(*args, stderr=stderr)
