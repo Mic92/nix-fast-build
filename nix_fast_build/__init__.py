@@ -13,10 +13,10 @@ from abc import ABC
 from asyncio import Queue, TaskGroup
 from asyncio.subprocess import Process
 from collections import defaultdict
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from tempfile import TemporaryDirectory
-from typing import IO, Any, AsyncIterator, Coroutine, DefaultDict, NoReturn
+from typing import IO, Any, AsyncIterator, Coroutine, DefaultDict, Iterator, NoReturn
 
 logger = logging.getLogger(__name__)
 
@@ -573,6 +573,19 @@ async def run_evaluation(
         build_queue.put_nowait((attr, drv_path, outputs))
 
 
+@dataclass
+class Stats:
+    tasks: dict[str, int] = field(default_factory=dict)
+
+    @contextmanager
+    def do_task(self, what: str) -> Iterator[None]:
+        self.tasks[what] = self.tasks.get(what, 0) + 1
+        try:
+            yield
+        finally:
+            self.tasks[what] = self.tasks.get(what, 1) - 1
+
+
 async def run_builds(
     stack: AsyncExitStack,
     build_output: IO,
@@ -581,23 +594,25 @@ async def run_builds(
     download_queue: Queue,
     failures: list[Failure],
     opts: Options,
+    stats: Stats,
 ) -> NoReturn:
     drv_paths: set[Any] = set()
 
     while True:
         attr, drv_path, outputs = await build_queue.get()
-        print(f"  building {attr}")
-        if drv_path in drv_paths:
-            continue
-        drv_paths.add(drv_path)
-        build = Build(attr, drv_path, outputs)
-        rc = await build.build(stack, build_output, opts)
-        build_queue.task_done()
-        if rc == 0:
-            upload_queue.put_nowait(build)
-            download_queue.put_nowait(build)
-        else:
-            failures.append(BuildFailure(build.attr, f"build exited with {rc}"))
+        with stats.do_task("builds"):
+            print(f"  building {attr}")
+            if drv_path in drv_paths:
+                continue
+            drv_paths.add(drv_path)
+            build = Build(attr, drv_path, outputs)
+            rc = await build.build(stack, build_output, opts)
+            if rc == 0:
+                upload_queue.put_nowait(build)
+                download_queue.put_nowait(build)
+            else:
+                failures.append(BuildFailure(build.attr, f"build exited with {rc}"))
+            build_queue.task_done()
 
 
 async def run_uploads(
@@ -605,13 +620,15 @@ async def run_uploads(
     upload_queue: Queue[Build],
     failures: list[Failure],
     opts: Options,
+    stats: Stats,
 ) -> NoReturn:
     while True:
         build = await upload_queue.get()
-        rc = await build.upload(stack, opts)
-        if rc != 0:
-            failures.append(UploadFailure(build.attr, f"upload exited with {rc}"))
-        upload_queue.task_done()
+        with stats.do_task("uploads"):
+            rc = await build.upload(stack, opts)
+            if rc != 0:
+                failures.append(UploadFailure(build.attr, f"upload exited with {rc}"))
+            upload_queue.task_done()
 
 
 async def run_downloads(
@@ -619,25 +636,33 @@ async def run_downloads(
     download_queue: Queue[Build],
     failures: list[Failure],
     opts: Options,
+    stats: Stats,
 ) -> NoReturn:
     while True:
         build = await download_queue.get()
-        rc = await build.download(stack, opts)
-        if rc != 0:
-            failures.append(DownloadFailure(build.attr, f"download exited with {rc}"))
-        download_queue.task_done()
+        with stats.do_task("downloads"):
+            rc = await build.download(stack, opts)
+            if rc != 0:
+                failures.append(
+                    DownloadFailure(build.attr, f"download exited with {rc}")
+                )
+            download_queue.task_done()
 
 
 async def report_progress(
     build_queue: Queue,
     upload_queue: Queue,
     download_queue: Queue,
+    stats: Stats,
 ) -> NoReturn:
     old_status = ""
     while True:
-        new_status = f"builds: {build_queue.qsize()}, uploads: {upload_queue.qsize()}, downloads: {download_queue.qsize()}"
+        builds = stats.tasks.get("builds", 0) + build_queue.qsize()
+        uploads = stats.tasks.get("uploads", 0) + upload_queue.qsize()
+        downloads = stats.tasks.get("downloads", 0) + download_queue.qsize()
+        new_status = f"builds: {builds}, uploads: {uploads}, downloads: {downloads}"
         if new_status != old_status:
-            print(new_status)
+            logger.info(new_status)
             old_status = new_status
         await asyncio.sleep(0.5)
 
@@ -662,7 +687,12 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
 
     async with TaskGroup() as tg:
         tasks = []
-        tasks.append(tg.create_task(run_evaluation(eval_proc, build_queue, failures[EvalFailure], opts)))
+        tasks.append(
+            tg.create_task(
+                run_evaluation(eval_proc, build_queue, failures[EvalFailure], opts)
+            )
+        )
+        stats = Stats()
         evaluation = tasks[0]
         build_output = sys.stdout.buffer
         if pipe:
@@ -679,26 +709,29 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                         download_queue,
                         failures[BuildFailure],
                         opts,
+                        stats,
                     )
                 )
             )
         logger.debug("Starting upload tasks")
         tasks.append(
             tg.create_task(
-                run_uploads(stack, upload_queue, failures[UploadFailure], opts)
+                run_uploads(stack, upload_queue, failures[UploadFailure], opts, stats)
             )
         )
         logger.debug("Starting download tasks")
         tasks.append(
             tg.create_task(
-                run_downloads(stack, download_queue, failures[DownloadFailure], opts)
+                run_downloads(
+                    stack, download_queue, failures[DownloadFailure], opts, stats
+                )
             )
         )
         if not opts.nom:
             logger.debug("Starting progress reporter")
             tasks.append(
                 tg.create_task(
-                    report_progress(build_queue, upload_queue, download_queue)
+                    report_progress(build_queue, upload_queue, download_queue, stats)
                 )
             )
         logger.debug("Waiting for nix-eval to finish...")
