@@ -149,7 +149,7 @@ async def parse_args(args: list[str]) -> Options:
     )
     parser.add_argument(
         "--systems",
-        help="Comma-separated list of systems to build for (default: current system)",
+        help="Space-separated list of systems to build for (default: current system)",
         default=None,
     )
     parser.add_argument(
@@ -234,7 +234,7 @@ async def parse_args(args: list[str]) -> Options:
     if a.systems is None:
         systems = set([nix_config.get("system", "")])
     else:
-        systems = set(a.systems.split(","))
+        systems = set(a.systems.split(" "))
 
     return Options(
         flake_url=flake_url,
