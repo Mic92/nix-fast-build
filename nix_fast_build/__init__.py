@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import logging
 import multiprocessing
 import os
 import shlex
@@ -16,6 +17,8 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from tempfile import TemporaryDirectory
 from typing import IO, Any, AsyncIterator, Coroutine, DefaultDict, NoReturn
+
+logger = logging.getLogger(__name__)
 
 
 def die(msg: str) -> NoReturn:
@@ -51,7 +54,7 @@ class Options:
     eval_workers: int = multiprocessing.cpu_count()
     max_jobs: int = 0
     retries: int = 0
-    verbose: bool = False
+    debug: bool = False
     copy_to: str | None = None
     nom: bool = True
     download: bool = True
@@ -176,9 +179,9 @@ async def parse_args(args: list[str]) -> Options:
         help="Copy build results to the given path (passed to nix copy, i.e. file:///tmp/cache?compression=none)",
     )
     parser.add_argument(
-        "--verbose",
+        "--debug",
         action="store_true",
-        help="Print verbose output",
+        help="debug logging output",
     )
     parser.add_argument(
         "--eval-max-memory-size",
@@ -238,7 +241,7 @@ async def parse_args(args: list[str]) -> Options:
         max_jobs=a.max_jobs,
         nom=not a.no_nom,
         download=not a.no_download,
-        verbose=a.verbose,
+        debug=a.debug,
         systems=systems,
         eval_max_memory_size=a.eval_max_memory_size,
         eval_workers=a.eval_workers,
@@ -254,7 +257,7 @@ def nix_flake_metadata(flake_url: str) -> dict[str, Any]:
         "--json",
         flake_url,
     ]
-    print("$ " + shlex.join(cmd))
+    logger.info("run %s", cmd)
     proc = subprocess.run(cmd, stdout=subprocess.PIPE)
     if proc.returncode != 0:
         die(
@@ -316,7 +319,8 @@ def upload_sources(opts: Options) -> str:
         "--json",
         opts.flake_url,
     ]
-    print("$ " + shlex.join(cmd))
+    print("run " + shlex.join(cmd))
+    logger.info("run %s", shlex.join(cmd))
     proc = subprocess.run(cmd, stdout=subprocess.PIPE)
     if proc.returncode != 0:
         die(
@@ -381,7 +385,7 @@ async def remote_temp_dir(opts: Options) -> AsyncIterator[str]:
         yield tempdir
     finally:
         cmd = ssh_cmd + ["rm", "-rf", tempdir]
-        print("$ " + shlex.join(cmd))
+        logger.info("run %s", shlex.join(cmd))
         proc = await asyncio.create_subprocess_exec(*cmd)
         await proc.wait()
 
@@ -410,7 +414,7 @@ async def nix_eval_jobs(stack: AsyncExitStack, opts: Options) -> AsyncIterator[P
     if opts.remote:
         args = nix_shell(["nixpkgs#nix-eval-jobs"]) + args
     args = maybe_remote(args, opts)
-    print("$ " + shlex.join(args))
+    logger.info("run %s", shlex.join(args))
     proc = await asyncio.create_subprocess_exec(*args, stdout=subprocess.PIPE)
     async with ensure_stop(proc, args) as proc:
         yield proc
@@ -449,18 +453,16 @@ class Build:
         for _ in range(opts.retries + 1):
             rc = await proc.wait()
             if rc == 0:
-                if opts.verbose:
-                    print(f"build {self.attr} succeeded")
+                logger.debug(f"build {self.attr} succeeded")
                 return rc
-            print(f"build {self.attr} exited with {rc}", file=sys.stderr)
+            logger.warning(f"build {self.attr} exited with {rc}")
         return rc
 
     async def nix_copy(
         self, args: list[str], exit_stack: AsyncExitStack, opts: Options
     ) -> int:
         cmd = maybe_remote(["nix", "copy", "--log-format", "raw"] + args, opts)
-        if opts.verbose:
-            print("$ " + shlex.join(cmd))
+        logger.debug("run %s", shlex.join(cmd))
         proc = await asyncio.create_subprocess_exec(*cmd)
         await exit_stack.enter_async_context(ensure_stop(proc, cmd))
         return await proc.wait()
@@ -472,8 +474,7 @@ class Build:
             self.outputs.values()
         )
         cmd = maybe_remote(cmd, opts)
-        if opts.verbose:
-            print("$ " + shlex.join(cmd))
+        logger.debug("run %s", shlex.join(cmd))
         proc = await asyncio.create_subprocess_exec(*cmd)
         await exit_stack.enter_async_context(ensure_stop(proc, cmd))
         return await proc.wait()
@@ -490,8 +491,7 @@ class Build:
             "--from",
             opts.remote_url,
         ] + list(self.outputs.values())
-        if opts.verbose:
-            print("$ " + shlex.join(cmd))
+        logger.debug("run %s", shlex.join(cmd))
         env = os.environ.copy()
         env["NIX_SSHOPTS"] = " ".join(opts.remote_ssh_options)
         proc = await asyncio.create_subprocess_exec(*cmd, env=env)
@@ -534,8 +534,7 @@ async def nix_build(
         "--keep-going",
     ] + opts.options
     args = maybe_remote(args, opts)
-    if opts.verbose:
-        print("$ " + shlex.join(args))
+    logger.debug("run %s", shlex.join(args))
     proc = await asyncio.create_subprocess_exec(*args, stderr=stderr)
     try:
         yield proc
@@ -551,8 +550,7 @@ async def run_evaluation(
 ) -> None:
     assert eval_proc.stdout
     async for line in eval_proc.stdout:
-        if opts.verbose:
-            print(line, end="")
+        logger.debug(line)
         try:
             job = json.loads(line)
         except json.JSONDecodeError:
@@ -668,6 +666,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         if pipe:
             build_output = pipe.write_file
         tasks = []
+        logger.debug("Starting %d build tasks", opts.max_jobs)
         for _ in range(opts.max_jobs):
             tasks.append(
                 tg.create_task(
@@ -682,26 +681,34 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                     )
                 )
             )
+        logger.debug("Starting upload tasks")
         tasks.append(
             tg.create_task(
                 run_uploads(stack, upload_queue, failures[UploadFailure], opts)
             )
         )
+        logger.debug("Starting download tasks")
         tasks.append(
             tg.create_task(
                 run_downloads(stack, download_queue, failures[DownloadFailure], opts)
             )
         )
         if not opts.nom:
+            logger.debug("Starting progress reporter")
             tasks.append(
                 tg.create_task(
                     report_progress(build_queue, upload_queue, download_queue)
                 )
             )
+        logger.debug("Waiting for evaluation to finish...")
         await evaluation
+        logger.debug("Evaluation finished, waiting for builds to finish...")
         await build_queue.join()
+        logger.debug("Builds finished, waiting for uploads to finish...")
         await upload_queue.join()
+        logger.debug("Uploads finished, waiting for downloads to finish...")
         await download_queue.join()
+        logger.debug("Cancelling tasks")
         for task in tasks:
             task.cancel()
 
@@ -724,6 +731,10 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
 
 async def async_main(args: list[str]) -> None:
     opts = await parse_args(args)
+    if opts.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
 
     rc = 0
     async with AsyncExitStack() as stack:
