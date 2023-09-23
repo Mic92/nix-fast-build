@@ -91,6 +91,15 @@ Actions.
 To optimize this, use the `--skip-cached` flag with `nix-fast-build`. This
 ensures that only those packages missing from the binary caches will be built.
 
+## Specifying Build Systems
+
+By default, `nix-fast-build` evaluates all architectures but only initiates
+builds for the current system. You can modify this behavior with the `--systems`
+flag. For instance, using `--systems "aarch64-linux x86_64-linux"` will prompt
+builds for both `aarch64-linux` and `x86_64-linux` architectures. Ensure that
+your system is capable of building for the specified architectures, either
+locally or through the remote builder protocol.
+
 ## Reference
 
 ```console
