@@ -54,10 +54,10 @@ Enjoy faster and more efficient NixOS builds with `nix-fast-build`!
 
 When leveraging the remote-builder protocol, uploading pre-built paths or
 sources from the local machine can often turn into a bottleneck.
-`nix-fast-build` sidesteps this by uploading only the flake and executing all
-evaluation/build operations on the remote end. At the end `nix-fast-build` will
-download the finished builds to the local machine while not having to download
-all build dependencies in between.
+`nix-fast-build` does not use the remote-builder protocol. Instead it uploads
+only the flake and executes all evaluation/build operations on the remote end.
+At the end `nix-fast-build` will download the finished builds to the local
+machine while not having to download all build dependencies in between.
 
 Here is how to use it:
 
