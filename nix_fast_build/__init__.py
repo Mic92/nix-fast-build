@@ -550,7 +550,7 @@ async def run_evaluation(
 ) -> None:
     assert eval_proc.stdout
     async for line in eval_proc.stdout:
-        logger.debug(line)
+        logger.debug(line.decode())
         try:
             job = json.loads(line)
         except json.JSONDecodeError:
