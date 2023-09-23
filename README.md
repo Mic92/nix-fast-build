@@ -69,6 +69,18 @@ Replace `youruser@yoursshhostname` with your SSH login credentials for the
 target machine. Please note that as of now, you must be recognized as a trusted
 user on the remote endpoint to access this feature.
 
+## CI-Friendly Output
+
+By default, `Nix-output-monitor` (abbreviated as `nom`) updates its output every
+0.5 seconds. In standard terminal environments, this frequent update is
+unnoticeable, as `nom` erases the previous output before displaying the new one.
+However, in Continuous Integration (CI) systems, each update appears as a
+separate line of output.
+
+To make output more concise for CI environments, use the `--no-nom` flag. This
+replaces `nom` with a streamlined status reporter, which updates only when
+there's a change in the number of pending builds, uploads, or downloads.
+
 ## Reference
 
 ```console
