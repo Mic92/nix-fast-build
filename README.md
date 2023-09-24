@@ -62,7 +62,7 @@ machine while not having to download all build dependencies in between.
 Here is how to use it:
 
 ```
-nix run github:Mic92/nix-ci-build -- --remote youruser@yoursshhostname
+nix run github:Mic92/nix-fast-build -- --remote youruser@yoursshhostname
 ```
 
 Replace `youruser@yoursshhostname` with your SSH login credentials for the
@@ -99,6 +99,22 @@ flag. For instance, using `--systems "aarch64-linux x86_64-linux"` will prompt
 builds for both `aarch64-linux` and `x86_64-linux` architectures. Ensure that
 your system is capable of building for the specified architectures, either
 locally or through the remote builder protocol.
+
+## Building different flake attributes
+
+`nix-fast-build` by default builds `.#checks.$currentSystem`, which refers to
+all checks for the current flake. You can modify this default behavior by using
+the `--flake` flag to specify a different attribute path.
+
+Example:
+
+```console
+$ nix run github:Mic92/nix-fast-build -- --flake github:NixOS/nixpkgs#legacyPackages.x86_64-linux.hello
+```
+
+**Note:** Always provide the complete flake path. Unlike `nix build`,
+`nix-fast-build` does not iterate over different attributes; the full path must
+be explicitly stated.
 
 ## Reference
 
