@@ -264,7 +264,7 @@ def nix_flake_metadata(flake_url: str) -> dict[str, Any]:
             flake_url,
         ]
     )
-    logger.info("run %s", cmd)
+    logger.info(f"run {shlex.join(cmd)}")
     proc = subprocess.run(cmd, stdout=subprocess.PIPE)
     if proc.returncode != 0:
         die(
