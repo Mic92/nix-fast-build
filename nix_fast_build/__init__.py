@@ -464,7 +464,7 @@ class Build:
         self, stack: AsyncExitStack, build_output: IO[str], opts: Options
     ) -> int:
         proc = await stack.enter_async_context(
-            nix_build(self.drv_path + "^*", build_output, opts)
+            nix_build(self.drv_path, build_output, opts)
         )
         rc = 0
         for _ in range(opts.retries + 1):
@@ -564,16 +564,11 @@ class QueueWithContext(Queue[T]):
 async def nix_build(
     installable: str, stderr: IO[Any] | None, opts: Options
 ) -> AsyncIterator[Process]:
-    args = nix_command(
-        [
-            "build",
-            installable,
-            "--log-format",
-            "raw",
-            "--keep-going",
-        ]
-        + opts.options
-    )
+    args = [
+        "nix-build",
+        installable,
+        "--keep-going",
+    ] + opts.options
     args = maybe_remote(args, opts)
     logger.debug("run %s", shlex.join(args))
     proc = await asyncio.create_subprocess_exec(*args, stderr=stderr)
