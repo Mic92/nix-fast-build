@@ -794,6 +794,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         if not opts.nom:
             logger.debug("Stopping progress reporter")
             tasks[-1].cancel()
+            await tasks[-1]
 
         for task in tasks:
             assert task.done(), f"Task {task.get_name()} is not done"
