@@ -594,7 +594,7 @@ async def run_evaluation(
     build_queue: Queue[Job | StopTask],
     failures: list[Failure],
     opts: Options,
-) -> None:
+) -> int:
     assert eval_proc.stdout
     async for line in eval_proc.stdout:
         logger.debug(line.decode())
@@ -618,6 +618,7 @@ async def run_evaluation(
             die(f"nix-eval-jobs did not return a drvPath: {line.decode()}")
         outputs = job.get("outputs", {})
         build_queue.put_nowait(Job(attr, drv_path, outputs))
+    return await eval_proc.wait()
 
 
 async def run_builds(
@@ -628,14 +629,14 @@ async def run_builds(
     download_queue: QueueWithContext[Build | StopTask],
     failures: list[Failure],
     opts: Options,
-) -> None:
+) -> int:
     drv_paths: set[Any] = set()
 
     while True:
         async with build_queue.get_context() as next_job:
             if isinstance(next_job, StopTask):
                 logger.debug("finish build task")
-                return
+                return 0
             job = next_job
             print(f"  building {job.attr}")
             if job.drv_path in drv_paths:
@@ -655,12 +656,12 @@ async def run_uploads(
     upload_queue: QueueWithContext[Build | StopTask],
     failures: list[Failure],
     opts: Options,
-) -> None:
+) -> int:
     while True:
         async with upload_queue.get_context() as build:
             if isinstance(build, StopTask):
                 logger.debug("finish upload task")
-                return
+                return 0
             rc = await build.upload(stack, opts)
             if rc != 0:
                 failures.append(UploadFailure(build.attr, f"upload exited with {rc}"))
@@ -671,12 +672,12 @@ async def run_downloads(
     download_queue: QueueWithContext[Build | StopTask],
     failures: list[Failure],
     opts: Options,
-) -> None:
+) -> int:
     while True:
         async with download_queue.get_context() as build:
             if isinstance(build, StopTask):
                 logger.debug("finish download task")
-                return
+                return 0
             rc = await build.download(stack, opts)
             if rc != 0:
                 failures.append(
@@ -688,7 +689,7 @@ async def report_progress(
     build_queue: QueueWithContext,
     upload_queue: QueueWithContext,
     download_queue: QueueWithContext,
-) -> None:
+) -> int:
     old_status = ""
     try:
         while True:
@@ -701,7 +702,8 @@ async def report_progress(
                 old_status = new_status
             await asyncio.sleep(0.5)
     except asyncio.CancelledError:
-        return
+        pass
+    return 0
 
 
 async def run(stack: AsyncExitStack, opts: Options) -> int:
@@ -771,10 +773,8 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                     name="progress",
                 )
             )
-        logger.debug("Waiting for nix-eval to finish...")
-        await eval_proc.wait()
         logger.debug("Waiting for evaluation to finish...")
-        await evaluation
+        eval_rc = await evaluation
 
         logger.debug("Evaluation finished, waiting for builds to finish...")
         for _ in range(opts.max_jobs):
@@ -794,6 +794,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         if not opts.nom:
             logger.debug("Stopping progress reporter")
             tasks[-1].cancel()
+            await tasks[-1]
 
         for task in tasks:
             assert task.done(), f"Task {task.get_name()} is not done"
@@ -805,7 +806,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                 f"{failure_type.__name__} for {failure.attr}: {failure.error_message}"
             )
             rc = 1
-    if eval_proc.returncode != 0 and eval_proc.returncode is not None:
+    if eval_rc != 0:
         logger.error(f"nix-eval-jobs exited with {eval_proc.returncode}")
         rc = 1
     if (
@@ -819,23 +820,26 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     return rc
 
 
-async def async_main(args: list[str]) -> None:
+async def async_main(args: list[str]) -> int:
     opts = await parse_args(args)
     if opts.debug:
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
 
-    rc = 0
-    async with AsyncExitStack() as stack:
+    stack = AsyncExitStack()
+    # using async wait here seems to make the return value skipped in the non-execptional case
+    try:
         if opts.remote_url:
             opts.flake_url = upload_sources(opts)
-        rc = await run(stack, opts)
-    sys.exit(rc)
+        return await run(stack, opts)
+    finally:
+        await stack.aclose()
 
 
 def main() -> None:
     try:
-        asyncio.run(async_main(sys.argv[1:]))
-    except KeyboardInterrupt:
-        logger.info("nix-fast-build was canceled by the user")
+        sys.exit(asyncio.run(async_main(sys.argv[1:])))
+    except KeyboardInterrupt as e:
+        logger.info(f"nix-fast-build was canceled by the user ({e})")
+        sys.exit(1)
