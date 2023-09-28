@@ -819,23 +819,26 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     return rc
 
 
-async def async_main(args: list[str]) -> None:
+async def async_main(args: list[str]) -> int:
     opts = await parse_args(args)
     if opts.debug:
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
 
-    rc = 0
-    async with AsyncExitStack() as stack:
+    stack = AsyncExitStack()
+    # using async wait here seems to make the return value skipped in the non-execptional case
+    try:
         if opts.remote_url:
             opts.flake_url = upload_sources(opts)
-        rc = await run(stack, opts)
-    sys.exit(rc)
+        return await run(stack, opts)
+    finally:
+        await stack.aclose()
 
 
 def main() -> None:
     try:
-        asyncio.run(async_main(sys.argv[1:]))
-    except KeyboardInterrupt:
-        logger.info("nix-fast-build was canceled by the user")
+        sys.exit(asyncio.run(async_main(sys.argv[1:])))
+    except KeyboardInterrupt as e:
+        logger.info(f"nix-fast-build was canceled by the user ({e})")
+        sys.exit(1)
