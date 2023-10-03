@@ -15,7 +15,7 @@ machines can be painfully slow. For instance, rebuilding the already-compiled
 `nix-fast-build`.
 
 **Solution**: `nix-fast-build` makes builds faster by evaluating and building
-building your nix packages concurrently, reducing the overall time.
+your nix packages concurrently, reducing the overall time.
 
 ## How Does It Work?
 
