@@ -18,6 +18,10 @@ python311.pkgs.buildPythonApplication {
   preFixup = ''
     makeWrapperArgs+=(--prefix PATH : ${path})
   '';
+  postFixup = ''
+    # don't leak python into devshell
+    rm $out/nix-support/propagated-build-inputs
+  '';
   shellHook = ''
     export PATH=${path}:$PATH
   '';
