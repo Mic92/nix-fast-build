@@ -43,8 +43,8 @@ or:
 $ nix run github:Mic92/nix-fast-build
 ```
 
-This command will concurrently evaluate and build the attributes
-`.#checks.$currentSystem`.
+This command will concurrently evaluate all systems in `.#checks` and build the
+attributes in `.#checks.$currentSystem`.
 
 ---
 
@@ -115,6 +115,15 @@ $ nix run github:Mic92/nix-fast-build -- --flake github:NixOS/nixpkgs#legacyPack
 **Note:** Always provide the complete flake path. Unlike `nix build`,
 `nix-fast-build` does not iterate over different attributes; the full path must
 be explicitly stated.
+
+## Only evaluate the current system
+
+By default nix-fast-build will evaluate all systems in `.#checks`, you can limit
+it to the current system by using this command:
+
+```console
+$ nix run github:Mic92/nix-fast-build -- --skip-cached --no-nom --flake ".#checks.$(nix eval --raw --impure --expr builtins.currentSystem)"
+```
 
 ## Reference
 
