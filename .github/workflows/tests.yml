@@ -23,6 +23,13 @@ jobs:
           accept-flake-config = true
     - name: Self-test
       run: nix shell --inputs-from . nixpkgs#coreutils -c timeout --verbose 600 nix run . -- ${{ matrix.nom }}
+
+    - name: Self-test (should fail)
+      run: |
+        if nix shell --inputs-from . nixpkgs#coreutils -c timeout --verbose 600 nix run . -- --flake .#legacyPackages ${{ matrix.nom }}; then
+          echo "expect this to fail"
+          false
+        fi
   tests:
     strategy:
       matrix:

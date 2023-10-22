@@ -32,6 +32,11 @@
               else
                 null;
           };
+          legacyPackages = {
+            hello-broken = pkgs.hello.overrideAttrs (_old: {
+              meta.broken = true;
+            });
+          };
           packages.default = self'.packages.nix-fast-build;
 
           checks =

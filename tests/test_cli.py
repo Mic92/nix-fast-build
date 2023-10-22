@@ -25,6 +25,13 @@ def test_build() -> None:
         assert e.code == 0
 
 
+def test_eval_error() -> None:
+    try:
+        cli(["--option", "builders", "", "--flake", ".#legacyPackages"])
+    except SystemExit as e:
+        assert e.code == 1
+
+
 def test_remote(sshd: Sshd) -> None:
     login = pwd.getpwuid(os.getuid()).pw_name
     try:
