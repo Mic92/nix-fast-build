@@ -62,6 +62,8 @@ class Options:
     copy_to: str | None = None
     nom: bool = True
     download: bool = True
+    no_link: bool = False
+    out_link: str = "result"
 
     @property
     def remote_url(self) -> None | str:
@@ -159,6 +161,17 @@ async def parse_args(args: list[str]) -> Options:
         help="Number of times to retry failed builds",
     )
     parser.add_argument(
+        "--no-link",
+        help="Do not create an out-link for builds (default: false)",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--out-link",
+        help="Name of the out-link for builds (default: result)",
+        default="result",
+    )
+    parser.add_argument(
         "--remote",
         type=str,
         help="Remote machine to build on",
@@ -252,6 +265,8 @@ async def parse_args(args: list[str]) -> Options:
         eval_max_memory_size=a.eval_max_memory_size,
         eval_workers=a.eval_workers,
         copy_to=a.copy_to,
+        no_link=a.no_link,
+        out_link=a.out_link,
     )
 
 
@@ -464,7 +479,7 @@ class Build:
         self, stack: AsyncExitStack, build_output: IO[str], opts: Options
     ) -> int:
         proc = await stack.enter_async_context(
-            nix_build(self.drv_path, build_output, opts)
+            nix_build(self.attr, self.drv_path, build_output, opts)
         )
         rc = 0
         for _ in range(opts.retries + 1):
@@ -562,13 +577,21 @@ class QueueWithContext(Queue[T]):
 
 @asynccontextmanager
 async def nix_build(
-    installable: str, stderr: IO[Any] | None, opts: Options
+    attr: str, installable: str, stderr: IO[Any] | None, opts: Options
 ) -> AsyncIterator[Process]:
     args = [
         "nix-build",
         installable,
         "--keep-going",
     ] + opts.options
+    if opts.no_link:
+        args += ["--no-link"]
+    else:
+        args += [
+            "--out-link",
+            opts.out_link + "-" + attr,
+        ]
+
     args = maybe_remote(args, opts)
     logger.debug("run %s", shlex.join(args))
     proc = await asyncio.create_subprocess_exec(*args, stderr=stderr)
