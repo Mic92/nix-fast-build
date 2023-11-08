@@ -143,7 +143,7 @@ async def parse_args(args: list[str]) -> Options:
     )
     parser.add_argument(
         "--no-nom",
-        help="Use nix-output-monitor to print build output (default: false)",
+        help="Don't use nix-output-monitor to print build output (default: false)",
         action="store_true",
         default=None,
     )
