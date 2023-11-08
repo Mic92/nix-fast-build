@@ -140,7 +140,7 @@ options:
   -j MAX_JOBS, --max-jobs MAX_JOBS
                         Maximum number of build jobs to run in parallel (0 for unlimited)
   --option name value   Nix option to set
-  --no-nom              Use nix-output-monitor to print build output (default: false)
+  --no-nom              Don't use nix-output-monitor to print build output (default: false)
   --systems SYSTEMS     Comma-separated list of systems to build for (default: current system)
   --retries RETRIES     Number of times to retry failed builds
   --remote REMOTE       Remote machine to build on
