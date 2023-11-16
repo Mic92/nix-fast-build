@@ -572,8 +572,8 @@ class QueueWithContext(Queue[T]):
 
     @asynccontextmanager
     async def get_context(self) -> AsyncIterator[T]:
+        el = await super().get()
         try:
-            el = await super().get()
             self.running_tasks += 1
             yield el
         finally:
