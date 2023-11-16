@@ -450,7 +450,12 @@ async def nix_eval_jobs(stack: AsyncExitStack, opts: Options) -> AsyncIterator[P
         args = nix_shell(["nixpkgs#nix-eval-jobs"]) + args
     args = maybe_remote(args, opts)
     logger.info("run %s", shlex.join(args))
-    proc = await asyncio.create_subprocess_exec(*args, stdout=subprocess.PIPE)
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=subprocess.PIPE,
+        # 128 KiB buffer to accomendate for large lines
+        limit=1024 * 128,
+    )
     async with ensure_stop(proc, args) as proc:
         yield proc
 
