@@ -395,7 +395,10 @@ async def ensure_stop(
             await asyncio.wait_for(proc.wait(), timeout=timeout)
         except asyncio.TimeoutError:
             print(f"Failed to stop process {shlex.join(cmd)}. Killing it.")
-            proc.kill()
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
             await proc.wait()
 
 
