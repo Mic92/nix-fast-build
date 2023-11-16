@@ -453,7 +453,7 @@ async def nix_eval_jobs(stack: AsyncExitStack, opts: Options) -> AsyncIterator[P
     proc = await asyncio.create_subprocess_exec(
         *args,
         stdout=subprocess.PIPE,
-        # 128 KiB buffer to accomendate for large lines
+        # 128 KiB buffer to accommodate for large lines
         limit=1024 * 128,
     )
     async with ensure_stop(proc, args) as proc:
