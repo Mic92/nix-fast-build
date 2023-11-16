@@ -466,7 +466,10 @@ async def nix_output_monitor(pipe: Pipe, opts: Options) -> AsyncIterator[Process
         try:
             pipe.write_file.close()
             pipe.read_file.close()
-            proc.kill()
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
             await proc.wait()
         finally:
             print("\033[?25h")
@@ -601,7 +604,10 @@ async def nix_build(
     try:
         yield proc
     finally:
-        proc.kill()
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
 
 
 @dataclass
