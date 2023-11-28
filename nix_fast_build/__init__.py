@@ -811,7 +811,13 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                 )
             )
         logger.debug("Waiting for evaluation to finish...")
-        eval_rc = await evaluation
+        try:
+            eval_rc = await evaluation
+        except Exception as e:
+            logger.error(
+                f"Evaluation was canceled while waiting for nix-eval-jobs to finish: {e}"
+            )
+            raise
 
         logger.debug("Evaluation finished, waiting for builds to finish...")
         for _ in range(opts.max_jobs):
