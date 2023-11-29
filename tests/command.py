@@ -1,25 +1,29 @@
+import contextlib
 import os
 import signal
 import subprocess
-from typing import IO, Any, Dict, Iterator, List, Union
+from collections.abc import Iterator
+from typing import IO, Any
 
 import pytest
 
-_FILE = Union[None, int, IO[Any]]
+_FILE = None | int | IO[Any]
 
 
 class Command:
     def __init__(self) -> None:
-        self.processes: List[subprocess.Popen[str]] = []
+        self.processes: list[subprocess.Popen[str]] = []
 
     def run(
         self,
-        command: List[str],
-        extra_env: Dict[str, str] = {},
+        command: list[str],
+        extra_env: dict[str, str] | None = None,
         stdin: _FILE = None,
         stdout: _FILE = None,
         stderr: _FILE = None,
     ) -> subprocess.Popen[str]:
+        if extra_env is None:
+            extra_env = {}
         env = os.environ.copy()
         env.update(extra_env)
         # We start a new session here so that we can than more reliably kill all childs as well
@@ -40,13 +44,11 @@ class Command:
         # We just kill all processes as quickly as possible because we don't
         # care about corrupted state and want to make tests fasts.
         for p in reversed(self.processes):
-            try:
+            with contextlib.suppress(OSError):
                 os.killpg(os.getpgid(p.pid), signal.SIGKILL)
-            except OSError:
-                pass
 
 
-@pytest.fixture
+@pytest.fixture()
 def command() -> Iterator[Command]:
     """
     Starts a background command. The process is automatically terminated in the end.

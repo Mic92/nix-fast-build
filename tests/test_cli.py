@@ -2,6 +2,7 @@ import asyncio
 import os
 import pwd
 
+import pytest
 from sshd import Sshd
 
 from nix_fast_build import async_main
@@ -12,29 +13,26 @@ def cli(args: list[str]) -> None:
 
 
 def test_help() -> None:
-    try:
+    with pytest.raises(SystemExit) as e:
         cli(["--help"])
-    except SystemExit as e:
-        assert e.code == 0
+    assert e.value.code == 0
 
 
 def test_build() -> None:
-    try:
+    with pytest.raises(SystemExit) as e:
         cli(["--option", "builders", ""])
-    except SystemExit as e:
-        assert e.code == 0
+    assert e.value.code == 1
 
 
 def test_eval_error() -> None:
-    try:
+    with pytest.raises(SystemExit) as e:
         cli(["--option", "builders", "", "--flake", ".#legacyPackages"])
-    except SystemExit as e:
-        assert e.code == 1
+    assert e.value.code == 1
 
 
 def test_remote(sshd: Sshd) -> None:
     login = pwd.getpwuid(os.getuid()).pw_name
-    try:
+    with pytest.raises(SystemExit) as e:
         cli(
             [
                 "--option",
@@ -56,5 +54,4 @@ def test_remote(sshd: Sshd) -> None:
                 "/dev/null",
             ]
         )
-    except SystemExit as e:
-        assert e.code == 0
+    assert e.value.code == 0

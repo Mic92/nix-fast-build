@@ -1,10 +1,6 @@
-#!/usr/bin/env python3
-
 import socket
 
 import pytest
-
-NEXT_PORT = 10000
 
 
 def check_port(port: int) -> bool:
@@ -14,33 +10,33 @@ def check_port(port: int) -> bool:
         try:
             tcp.bind(("127.0.0.1", port))
             udp.bind(("127.0.0.1", port))
-            return True
         except OSError:
             return False
+        else:
+            return True
 
 
 def check_port_range(port_range: range) -> bool:
-    for port in port_range:
-        if not check_port(port):
-            return False
-    return True
+    return all(check_port(port) for port in port_range)
 
 
 class Ports:
+    NEXT_PORT = 10000
+
     def allocate(self, num: int) -> int:
         """
         Allocates
         """
-        global NEXT_PORT
-        while NEXT_PORT + num <= 65535:
-            start = NEXT_PORT
-            NEXT_PORT += num
-            if not check_port_range(range(start, NEXT_PORT)):
+        while Ports.NEXT_PORT + num <= 65535:
+            start = Ports.NEXT_PORT
+            Ports.NEXT_PORT += num
+            if not check_port_range(range(start, Ports.NEXT_PORT)):
                 continue
             return start
-        raise Exception("cannot find enough free port")
+        msg = "cannot find enough free port"
+        raise OSError(msg)
 
 
-@pytest.fixture
+@pytest.fixture()
 def ports() -> Ports:
     return Ports()
