@@ -3,9 +3,10 @@ import os
 import pwd
 
 import pytest
-from sshd import Sshd
 
 from nix_fast_build import async_main
+
+from .sshd import Sshd
 
 
 def cli(args: list[str]) -> None:

@@ -8,8 +8,9 @@ from sys import platform
 from tempfile import TemporaryDirectory
 
 import pytest
-from command import Command
-from ports import Ports
+
+from .command import Command
+from .ports import Ports
 
 
 class Sshd:
