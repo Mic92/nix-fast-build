@@ -14,7 +14,7 @@ from abc import ABC
 from asyncio import Queue, TaskGroup
 from asyncio.subprocess import Process
 from collections import defaultdict
-from collections.abc import AsyncIterator, Coroutine
+from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from tempfile import TemporaryDirectory
@@ -744,18 +744,12 @@ async def report_progress(
 
 
 async def run(stack: AsyncExitStack, opts: Options) -> int:
-    eval_proc_future = stack.enter_async_context(nix_eval_jobs(stack, opts))
+    eval_proc = await stack.enter_async_context(nix_eval_jobs(stack, opts))
     pipe: Pipe | None = None
-    output_monitor_future: Coroutine[None, None, Process] | None = None
+    output_monitor: Process | None = None
     if opts.nom:
         pipe = stack.enter_context(Pipe())
-        output_monitor_future = stack.enter_async_context(
-            nix_output_monitor(pipe, opts)
-        )
-    eval_proc = await eval_proc_future
-    output_monitor: Process | None = None
-    if output_monitor_future:
-        output_monitor = await output_monitor_future
+        output_monitor = await stack.enter_async_context(nix_output_monitor(pipe, opts))
     failures: defaultdict[type, list[Failure]] = defaultdict(list)
     build_queue: QueueWithContext[Job | StopTask] = QueueWithContext()
     upload_queue: QueueWithContext[Build | StopTask] = QueueWithContext()
