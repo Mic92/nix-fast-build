@@ -22,7 +22,7 @@
       in
       {
         imports = [ ./treefmt.nix ];
-        systems = officialPlatforms ++ [ "riscv64-linux" "i686-linux" ];
+        systems = officialPlatforms ++ [ "riscv64-linux" ];
         perSystem = { pkgs, self', ... }: {
           packages.nix-fast-build = pkgs.callPackage ./default.nix {
             # we don't want to compile ghc otherwise
