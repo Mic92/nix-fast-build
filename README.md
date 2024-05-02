@@ -125,6 +125,20 @@ it to the current system by using this command:
 $ nix run github:Mic92/nix-fast-build -- --skip-cached --no-nom --flake ".#checks.$(nix eval --raw --impure --expr builtins.currentSystem)"
 ```
 
+## Cachix support
+
+nix-fast-build can upload to cachix like this:
+
+```console
+$ nix-fast-build --cachix-cache mic92
+```
+
+nix-fast-build assumes that your current machine is either logged in to cachix
+or has the environment variables `CACHIX_SIGNING_KEY` or `CACHIX_AUTH_TOKEN`
+set. These environment variables are currently not propagated to ssh when using
+the `--remote` flag, instead the user is expected that cachix credentials are
+configured on the remote machine.
+
 ## Reference
 
 ```console
