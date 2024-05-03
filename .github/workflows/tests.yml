@@ -8,9 +8,7 @@ jobs:
   self-test:
     strategy:
       matrix:
-        # macos has weird SIGBUS errors in github that I cannot reproduce on aarch64-darwin...
-        #os: [ ubuntu-latest, macos-latest ]
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-latest, macos-latest ]
         nom: [ "", "--no-nom"]
     runs-on: ${{ matrix.os }}
     steps:
@@ -35,8 +33,7 @@ jobs:
   tests:
     strategy:
       matrix:
-        #os: [ ubuntu-latest, macos-latest ]
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-latest, macos-latest ]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
