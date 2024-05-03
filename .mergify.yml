@@ -1,8 +1,11 @@
 queue_rules:
   - name: default
     merge_conditions:
+      - check-success=self-test (macos-latest)
+      - check-success=self-test (macos-latest, --no-nom)
       - check-success=self-test (ubuntu-latest)
       - check-success=self-test (ubuntu-latest, --no-nom)
+      - check-success=tests (macos-latest)
       - check-success=tests (ubuntu-latest)
 defaults:
   actions:
