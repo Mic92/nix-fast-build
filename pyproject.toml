@@ -70,8 +70,8 @@ pythonpath = [ "." ]
 [tool.ruff]
 target-version = "py311"
 line-length = 88
-select = ["ALL"]
-ignore = [
+lint.select = ["ALL"]
+lint.ignore = [
   # pydocstyle
   "D",
   # todo comments
@@ -100,6 +100,8 @@ ignore = [
   # Starting a process with a partial executable path
   "S607",
 
+  # Too many branches
+  "PLR0912",
   # Too many statements
   "PLR0915",
   # Too many arguments in function definition
