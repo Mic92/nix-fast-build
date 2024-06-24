@@ -45,5 +45,8 @@ jobs:
         github_access_token: ${{ secrets.GITHUB_TOKEN }}
         extra_nix_config: |
           accept-flake-config = true
+    - name: Install nix-eval-jobs for remote test
+      run: nix profile install --inputs-from . nixpkgs#nix-eval-jobs
+    - run: command -v nix-eval-jobs && nix-eval-jobs --help
     - name: Run tests
       run: nix develop -c pytest ./tests
