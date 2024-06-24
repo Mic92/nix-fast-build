@@ -380,18 +380,9 @@ def upload_sources(opts: Options) -> str:
         )
 
 
-def nix_shell(packages: list[str]) -> list[str]:
-    return nix_command(
-        [
-            "shell",
-            "--extra-experimental-features",
-            "nix-command",
-            "--extra-experimental-features",
-            "flakes",
-            *packages,
-            "-c",
-        ]
-    )
+def nix_shell(fallback_package: str, wanted_command: str) -> list[str]:
+    bash_cmd = 'pkg=$1; shift; cmd=("$@"); if command -v "${cmd[0]}" >/dev/null; then exec "${cmd[@]}"; else exec nix --experimental-features "nix-command flakes" shell "$pkg" -c "${cmd[@]}"; fi'
+    return ["bash", "-c", bash_cmd, "bash", fallback_package, wanted_command]
 
 
 @asynccontextmanager
@@ -438,7 +429,6 @@ async def remote_temp_dir(opts: Options) -> AsyncIterator[Path]:
 @asynccontextmanager
 async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
     args = [
-        "nix-eval-jobs",
         "--gc-roots-dir",
         str(tmp_dir / "gcroots"),
         "--force-recurse",
@@ -453,7 +443,9 @@ async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
     if opts.skip_cached:
         args.append("--check-cache-status")
     if opts.remote:
-        args = nix_shell(["nixpkgs#nix-eval-jobs"]) + args
+        args = nix_shell("nixpkgs#nix-eval-jobs", "nix-eval-jobs") + args
+    else:
+        args = ["nix-eval-jobs", *args]
     args = maybe_remote(args, opts)
     logger.info("run %s", shlex.join(args))
     proc = await asyncio.create_subprocess_exec(
@@ -468,7 +460,7 @@ async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
 
 @asynccontextmanager
 async def nix_output_monitor(pipe: Pipe, opts: Options) -> AsyncIterator[Process]:
-    cmd = maybe_remote([*nix_shell(["nixpkgs#nix-output-monitor"]), "nom"], opts)
+    cmd = maybe_remote([*nix_shell("nixpkgs#nix-output-monitor", "nom")], opts)
     proc = await asyncio.create_subprocess_exec(*cmd, stdin=pipe.read_file)
     try:
         yield proc
@@ -491,8 +483,7 @@ async def run_cachix_daemon(
     sock_path = tmp_dir / "cachix.sock"
     cmd = maybe_remote(
         [
-            *nix_shell(["nixpkgs#cachix"]),
-            "cachix",
+            *nix_shell("nixpkgs#cachix", "cachix"),
             "daemon",
             "run",
             "--socket",
@@ -520,8 +511,7 @@ async def run_cachix_daemon_stop(
         return 0
     cmd = maybe_remote(
         [
-            *nix_shell(["nixpkgs#cachix"]),
-            "cachix",
+            *nix_shell("nixpkgs#cachix", "cachix"),
             "daemon",
             "stop",
             "--socket",
@@ -590,8 +580,7 @@ class Build:
             return 0
         cmd = maybe_remote(
             [
-                *nix_shell(["nixpkgs#cachix"]),
-                "cachix",
+                *nix_shell("nixpkgs#cachix", "cachix"),
                 "daemon",
                 "push",
                 "--socket",
