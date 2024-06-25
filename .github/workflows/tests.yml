@@ -8,9 +8,7 @@ jobs:
   self-test:
     strategy:
       matrix:
-        # macos has weird SIGBUS errors in github that I cannot reproduce on aarch64-darwin...
-        #os: [ ubuntu-latest, macos-latest ]
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-latest, macos-latest ]
         nom: [ "", "--no-nom"]
     runs-on: ${{ matrix.os }}
     steps:
@@ -35,8 +33,7 @@ jobs:
   tests:
     strategy:
       matrix:
-        #os: [ ubuntu-latest, macos-latest ]
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-latest, macos-latest ]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -48,5 +45,8 @@ jobs:
         github_access_token: ${{ secrets.GITHUB_TOKEN }}
         extra_nix_config: |
           accept-flake-config = true
+    - name: Install nix-eval-jobs for remote test
+      run: nix profile install --inputs-from . nixpkgs#nix-eval-jobs
+    - run: command -v nix-eval-jobs && nix-eval-jobs --help
     - name: Run tests
       run: nix develop -c pytest ./tests
