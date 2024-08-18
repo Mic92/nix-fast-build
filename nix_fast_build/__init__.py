@@ -387,7 +387,10 @@ def nix_shell(fallback_package: str, wanted_command: str) -> list[str]:
 
 @asynccontextmanager
 async def ensure_stop(
-    proc: Process, cmd: list[str], timeout: float = 3.0, signal_no: int = signal.SIGTERM
+    proc: Process,
+    cmd: list[str],
+    wait_timeout: float = 3.0,
+    signal_no: int = signal.SIGTERM,
 ) -> AsyncIterator[Process]:
     try:
         yield proc
@@ -396,7 +399,7 @@ async def ensure_stop(
             with contextlib.suppress(ProcessLookupError):
                 proc.send_signal(signal_no)
                 try:
-                    await asyncio.wait_for(proc.wait(), timeout=timeout)
+                    await asyncio.wait_for(proc.wait(), timeout=wait_timeout)
                 except TimeoutError:
                     print(f"Failed to stop process {shlex.join(cmd)}. Killing it.")
                     proc.kill()

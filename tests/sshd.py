@@ -76,7 +76,7 @@ def sshd_config(project_root: Path, test_root: Path) -> Iterator[SshdConfig]:
         yield SshdConfig(str(sshd_config), str(host_key), lib_path)
 
 
-@pytest.fixture()
+@pytest.fixture
 def sshd(sshd_config: SshdConfig, command: Command, ports: Ports) -> Iterator[Sshd]:
     port = ports.allocate(1)
     sshd = shutil.which("sshd")
