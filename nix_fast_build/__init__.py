@@ -20,14 +20,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import TracebackType
-from typing import IO, Any, NoReturn, TypeVar
+from typing import IO, Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
 
-def die(msg: str) -> NoReturn:
-    print(msg, file=sys.stderr)
-    sys.exit(1)
+class Error(Exception):
+    pass
 
 
 class Pipe:
@@ -105,14 +104,14 @@ async def get_nix_config(
         proc = await asyncio.create_subprocess_exec(
             *args, stdout=asyncio.subprocess.PIPE
         )
-    except FileNotFoundError:
-        die(f"nix not found in PATH, try to run {shlex.join(args)}")
+    except FileNotFoundError as e:
+        msg = f"nix not found in PATH, try to run {shlex.join(args)}"
+        raise Error(msg) from e
 
     stdout, _ = await proc.communicate()
     if proc.returncode != 0:
-        die(
-            f"Failed to get nix config, {shlex.join(args)} exited with {proc.returncode}"
-        )
+        msg = f"Failed to get nix config, {shlex.join(args)} exited with {proc.returncode}"
+        raise Error(msg)
     data = json.loads(stdout)
 
     config = {}
@@ -298,16 +297,16 @@ def nix_flake_metadata(flake_url: str) -> dict[str, Any]:
     logger.info(f"run {shlex.join(cmd)}")
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
     if proc.returncode != 0:
-        die(
+        msg = (
             f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
         )
+        raise Error(msg)
 
     try:
         data = json.loads(proc.stdout)
     except (json.JSONDecodeError, OSError) as e:
-        die(
-            f"failed to parse output of {shlex.join(cmd)}: {e}\nGot: {proc.stdout.decode('utf-8', 'replace')}"
-        )
+        msg = f"failed to parse output of {shlex.join(cmd)}: {e}\nGot: {proc.stdout.decode('utf-8', 'replace')}"
+        raise Error(msg) from e
     return data
 
 
@@ -348,9 +347,8 @@ def upload_sources(opts: Options) -> str:
             )
             proc = subprocess.run(cmd, stdout=subprocess.PIPE, env=env, check=False)
             if proc.returncode != 0:
-                die(
-                    f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
-                )
+                msg = f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
+                raise Error(msg)
             return path
 
     # Slow path: we need to upload all sources to the remote machine
@@ -369,15 +367,13 @@ def upload_sources(opts: Options) -> str:
     logger.info("run %s", shlex.join(cmd))
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, check=False)
     if proc.returncode != 0:
-        die(
-            f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
-        )
+        msg = f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
+        raise Error(msg)
     try:
         return json.loads(proc.stdout)["path"]
     except (json.JSONDecodeError, OSError) as e:
-        die(
-            f"failed to parse output of {shlex.join(cmd)}: {e}\nGot: {proc.stdout.decode('utf-8', 'replace')}"
-        )
+        msg = f"failed to parse output of {shlex.join(cmd)}: {e}\nGot: {proc.stdout.decode('utf-8', 'replace')}"
+        raise Error(msg) from e
 
 
 def nix_shell(fallback_package: str, wanted_command: str) -> list[str]:
@@ -417,9 +413,8 @@ async def remote_temp_dir(opts: Options) -> AsyncIterator[Path]:
     tempdir = line.decode().strip()
     rc = await proc.wait()
     if rc != 0:
-        die(
-            f"Failed to create temporary directory on remote machine {opts.remote}: {rc}"
-        )
+        msg = f"Failed to create temporary directory on remote machine {opts.remote}: {rc}"
+        raise Error(msg)
     try:
         yield Path(tempdir)
     finally:
@@ -708,8 +703,9 @@ async def run_evaluation(
         logger.debug(line.decode())
         try:
             job = json.loads(line)
-        except json.JSONDecodeError:
-            die(f"Failed to parse line of nix-eval-jobs output: {line.decode()}")
+        except json.JSONDecodeError as e
+            msg = f"Failed to parse line of nix-eval-jobs output: {line.decode()}"
+            raise Error(msg) from e
         error = job.get("error")
         attr = job.get("attr", "unknown-flake-attribute")
         if error:
@@ -723,7 +719,8 @@ async def run_evaluation(
             continue
         drv_path = job.get("drvPath")
         if not drv_path:
-            die(f"nix-eval-jobs did not return a drvPath: {line.decode()}")
+            msg = f"nix-eval-jobs did not return a drvPath: {line.decode()}"
+            raise Error(msg)
         outputs = job.get("outputs", {})
         build_queue.put_nowait(Job(attr, drv_path, outputs))
     return await eval_proc.wait()
@@ -953,19 +950,19 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     rc = 0
     for failure_type in [EvalFailure, BuildFailure, UploadFailure, DownloadFailure]:
         for failure in failures[failure_type]:
-            logger.error(
+            logger.warning(
                 f"{failure_type.__name__} for {failure.attr}: {failure.error_message}"
             )
             rc = 1
     if eval_rc != 0:
-        logger.error(f"nix-eval-jobs exited with {eval_proc.returncode}")
+        logger.warning(f"nix-eval-jobs exited with {eval_proc.returncode}")
         rc = 1
     if (
         output_monitor
         and output_monitor.returncode != 0
         and output_monitor.returncode is not None
     ):
-        logger.error(f"nix-output-monitor exited with {output_monitor.returncode}")
+        logger.warning(f"nix-output-monitor exited with {output_monitor.returncode}")
         rc = 1
 
     return rc
@@ -993,4 +990,7 @@ def main() -> None:
         sys.exit(asyncio.run(async_main(sys.argv[1:])))
     except KeyboardInterrupt as e:
         logger.info(f"nix-fast-build was canceled by the user ({e})")
+        sys.exit(1)
+    except Error as e:
+        logger.error(e)
         sys.exit(1)
