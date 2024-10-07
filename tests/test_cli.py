@@ -1,6 +1,10 @@
 import asyncio
+import json
 import os
 import pwd
+import xml.etree
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -22,6 +26,34 @@ def test_help() -> None:
 def test_build() -> None:
     rc = cli(["--option", "builders", ""])
     assert rc == 0
+
+
+def test_build_junit() -> None:
+    with TemporaryDirectory() as d:
+        path = Path(d) / "test.xml"
+        rc = cli(
+            [
+                "--option",
+                "builders",
+                "",
+                "--result-format",
+                "junit",
+                "--result-file",
+                str(path),
+            ]
+        )
+        data = xml.etree.ElementTree.parse(path)  # noqa: S314
+        assert data.getroot().tag == "testsuites"
+        assert rc == 0
+
+
+def test_build_json() -> None:
+    with TemporaryDirectory() as d:
+        path = Path(d) / "test.json"
+        rc = cli(["--option", "builders", "", "--result-file", str(path)])
+        data = json.loads(path.read_text())
+        assert len(data["results"]) > 0
+        assert rc == 0
 
 
 def test_eval_error() -> None:
