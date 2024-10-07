@@ -139,38 +139,90 @@ set. These environment variables are currently not propagated to ssh when using
 the `--remote` flag, instead the user is expected that cachix credentials are
 configured on the remote machine.
 
+## Machine-readable builds results
+
+nix-fast-build supports both its own json format and junit:
+
+Example for json output:
+
+```console
+nix-fast-build --result-file result.json
+cat ./result.json
+{
+   "results": [
+     {
+       "attr": "riscv64-linux.package-default",
+       "duration": 0.0,
+       "error": null,
+       "success": true,
+       "type": "EVAL"
+     },
+# ...
+```
+
+Example for junit result output:
+
+```console
+nix-fast-build --result-format junit --result-file result.xml
+```
+
+```console
+nix-shell -p python3Packages.junit2html --run 'junit2html result.xml result.html'
+```
+
 ## Reference
 
 ```console
-usage: nix-fast-build [-h] [-f FLAKE] [-j MAX_JOBS] [--option name value] [--remote-ssh-option name value] [--no-nom]
-                      [--systems SYSTEMS] [--retries RETRIES] [--no-link] [--out-link OUT_LINK] [--remote REMOTE]
-                      [--always-upload-source] [--no-download] [--skip-cached] [--copy-to COPY_TO] [--debug]
-                      [--eval-max-memory-size EVAL_MAX_MEMORY_SIZE] [--eval-workers EVAL_WORKERS]
+usage: nix-fast-build [-h] [-f FLAKE] [-j MAX_JOBS] [--option name value]
+                      [--remote-ssh-option name value]
+                      [--cachix-cache CACHIX_CACHE] [--no-nom]
+                      [--systems SYSTEMS] [--retries RETRIES] [--no-link]
+                      [--out-link OUT_LINK] [--remote REMOTE]
+                      [--always-upload-source] [--no-download] [--skip-cached]
+                      [--copy-to COPY_TO] [--debug]
+                      [--eval-max-memory-size EVAL_MAX_MEMORY_SIZE]
+                      [--eval-workers EVAL_WORKERS]
+                      [--result-file RESULT_FILE]
+                      [--result-format {json,junit}]
 
 options:
   -h, --help            show this help message and exit
   -f FLAKE, --flake FLAKE
                         Flake url to evaluate/build (default: .#checks
   -j MAX_JOBS, --max-jobs MAX_JOBS
-                        Maximum number of build jobs to run in parallel (0 for unlimited)
+                        Maximum number of build jobs to run in parallel (0 for
+                        unlimited)
   --option name value   Nix option to set
   --remote-ssh-option name value
                         ssh option when accessing remote
-  --no-nom              Don't use nix-output-monitor to print build output (default: false)
-  --systems SYSTEMS     Space-separated list of systems to build for (default: current system)
+  --cachix-cache CACHIX_CACHE
+                        Cachix cache to upload to
+  --no-nom              Don't use nix-output-monitor to print build output
+                        (default: false)
+  --systems SYSTEMS     Space-separated list of systems to build for (default:
+                        current system)
   --retries RETRIES     Number of times to retry failed builds
   --no-link             Do not create an out-link for builds (default: false)
   --out-link OUT_LINK   Name of the out-link for builds (default: result)
   --remote REMOTE       Remote machine to build on
   --always-upload-source
-                        Always upload sources to remote machine. This is needed if the remote machine cannot access all sources
+                        Always upload sources to remote machine. This is
+                        needed if the remote machine cannot access all sources
                         (default: false)
   --no-download         Do not download build results from remote machine
-  --skip-cached         Skip builds that are already present in the binary cache (default: false)
-  --copy-to COPY_TO     Copy build results to the given path (passed to nix copy, i.e. file:///tmp/cache?compression=none)
+  --skip-cached         Skip builds that are already present in the binary
+                        cache (default: false)
+  --copy-to COPY_TO     Copy build results to the given path (passed to nix
+                        copy, i.e. file:///tmp/cache?compression=none)
   --debug               debug logging output
   --eval-max-memory-size EVAL_MAX_MEMORY_SIZE
-                        Maximum memory size for nix-eval-jobs (in MiB) per worker. After the limit is reached, the worker is restarted.
+                        Maximum memory size for nix-eval-jobs (in MiB) per
+                        worker. After the limit is reached, the worker is
+                        restarted.
   --eval-workers EVAL_WORKERS
                         Number of evaluation threads spawned
+  --result-file RESULT_FILE
+                        File to write build results to
+  --result-format {json,junit}
+                        Format of the build result file
 ```

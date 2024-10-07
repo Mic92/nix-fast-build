@@ -37,6 +37,6 @@ class Ports:
         raise OSError(msg)
 
 
-@pytest.fixture()
+@pytest.fixture
 def ports() -> Ports:
     return Ports()

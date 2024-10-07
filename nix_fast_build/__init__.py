@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import contextlib
+import enum
 import json
 import logging
 import multiprocessing
@@ -10,7 +11,8 @@ import shutil
 import signal
 import subprocess
 import sys
-from abc import ABC
+import timeit
+import xml.etree.ElementTree as ET
 from asyncio import Queue, TaskGroup
 from asyncio.subprocess import Process
 from collections import defaultdict
@@ -20,14 +22,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import TracebackType
-from typing import IO, Any, NoReturn, TypeVar
+from typing import IO, Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
 
-def die(msg: str) -> NoReturn:
-    print(msg, file=sys.stderr)
-    sys.exit(1)
+class Error(Exception):
+    pass
 
 
 class Pipe:
@@ -53,6 +54,11 @@ def nix_command(args: list[str]) -> list[str]:
     return ["nix", "--experimental-features", "nix-command flakes", *args]
 
 
+class ResultFormat(enum.Enum):
+    JSON = enum.auto()
+    JUNIT = enum.auto()
+
+
 @dataclass
 class Options:
     flake_url: str = ""
@@ -73,6 +79,8 @@ class Options:
     download: bool = True
     no_link: bool = False
     out_link: str = "result"
+    result_format: ResultFormat = ResultFormat.JSON
+    result_file: Path | None = None
 
     cachix_cache: str | None = None
 
@@ -81,6 +89,23 @@ class Options:
         if self.remote is None:
             return None
         return f"ssh://{self.remote}"
+
+
+class ResultType(enum.Enum):
+    EVAL = enum.auto()
+    BUILD = enum.auto()
+    UPLOAD = enum.auto()
+    DOWNLOAD = enum.auto()
+    CACHIX = enum.auto()
+
+
+@dataclass
+class Result:
+    result_type: ResultType
+    attr: str
+    success: bool
+    duration: float
+    error: str | None
 
 
 def _maybe_remote(
@@ -105,14 +130,14 @@ async def get_nix_config(
         proc = await asyncio.create_subprocess_exec(
             *args, stdout=asyncio.subprocess.PIPE
         )
-    except FileNotFoundError:
-        die(f"nix not found in PATH, try to run {shlex.join(args)}")
+    except FileNotFoundError as e:
+        msg = f"nix not found in PATH, try to run {shlex.join(args)}"
+        raise Error(msg) from e
 
     stdout, _ = await proc.communicate()
     if proc.returncode != 0:
-        die(
-            f"Failed to get nix config, {shlex.join(args)} exited with {proc.returncode}"
-        )
+        msg = f"Failed to get nix config, {shlex.join(args)} exited with {proc.returncode}"
+        raise Error(msg)
     data = json.loads(stdout)
 
     config = {}
@@ -229,6 +254,18 @@ async def parse_args(args: list[str]) -> Options:
         default=multiprocessing.cpu_count(),
         help="Number of evaluation threads spawned",
     )
+    parser.add_argument(
+        "--result-file",
+        type=Path,
+        default=None,
+        help="File to write build results to",
+    )
+    parser.add_argument(
+        "--result-format",
+        choices=["json", "junit"],
+        default="json",
+        help="Format of the build result file",
+    )
 
     a = parser.parse_args(args)
 
@@ -283,6 +320,8 @@ async def parse_args(args: list[str]) -> Options:
         cachix_cache=a.cachix_cache,
         no_link=a.no_link,
         out_link=a.out_link,
+        result_format=ResultFormat[a.result_format.upper()],
+        result_file=a.result_file,
     )
 
 
@@ -298,16 +337,16 @@ def nix_flake_metadata(flake_url: str) -> dict[str, Any]:
     logger.info(f"run {shlex.join(cmd)}")
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
     if proc.returncode != 0:
-        die(
+        msg = (
             f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
         )
+        raise Error(msg)
 
     try:
         data = json.loads(proc.stdout)
     except (json.JSONDecodeError, OSError) as e:
-        die(
-            f"failed to parse output of {shlex.join(cmd)}: {e}\nGot: {proc.stdout.decode('utf-8', 'replace')}"
-        )
+        msg = f"failed to parse output of {shlex.join(cmd)}: {e}\nGot: {proc.stdout.decode('utf-8', 'replace')}"
+        raise Error(msg) from e
     return data
 
 
@@ -348,9 +387,8 @@ def upload_sources(opts: Options) -> str:
             )
             proc = subprocess.run(cmd, stdout=subprocess.PIPE, env=env, check=False)
             if proc.returncode != 0:
-                die(
-                    f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
-                )
+                msg = f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
+                raise Error(msg)
             return path
 
     # Slow path: we need to upload all sources to the remote machine
@@ -369,15 +407,15 @@ def upload_sources(opts: Options) -> str:
     logger.info("run %s", shlex.join(cmd))
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, check=False)
     if proc.returncode != 0:
-        die(
+        msg = (
             f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
         )
+        raise Error(msg)
     try:
         return json.loads(proc.stdout)["path"]
     except (json.JSONDecodeError, OSError) as e:
-        die(
-            f"failed to parse output of {shlex.join(cmd)}: {e}\nGot: {proc.stdout.decode('utf-8', 'replace')}"
-        )
+        msg = f"failed to parse output of {shlex.join(cmd)}: {e}\nGot: {proc.stdout.decode('utf-8', 'replace')}"
+        raise Error(msg) from e
 
 
 def nix_shell(fallback_package: str, wanted_command: str) -> list[str]:
@@ -387,7 +425,10 @@ def nix_shell(fallback_package: str, wanted_command: str) -> list[str]:
 
 @asynccontextmanager
 async def ensure_stop(
-    proc: Process, cmd: list[str], timeout: float = 3.0, signal_no: int = signal.SIGTERM
+    proc: Process,
+    cmd: list[str],
+    wait_timeout: float = 3.0,
+    signal_no: int = signal.SIGTERM,
 ) -> AsyncIterator[Process]:
     try:
         yield proc
@@ -396,7 +437,7 @@ async def ensure_stop(
             with contextlib.suppress(ProcessLookupError):
                 proc.send_signal(signal_no)
                 try:
-                    await asyncio.wait_for(proc.wait(), timeout=timeout)
+                    await asyncio.wait_for(proc.wait(), timeout=wait_timeout)
                 except TimeoutError:
                     print(f"Failed to stop process {shlex.join(cmd)}. Killing it.")
                     proc.kill()
@@ -414,9 +455,8 @@ async def remote_temp_dir(opts: Options) -> AsyncIterator[Path]:
     tempdir = line.decode().strip()
     rc = await proc.wait()
     if rc != 0:
-        die(
-            f"Failed to create temporary directory on remote machine {opts.remote}: {rc}"
-        )
+        msg = f"Failed to create temporary directory on remote machine {opts.remote}: {rc}"
+        raise Error(msg)
     try:
         yield Path(tempdir)
     finally:
@@ -615,32 +655,6 @@ class Build:
         return await proc.wait()
 
 
-@dataclass
-class Failure(ABC):
-    attr: str
-    error_message: str
-
-
-class EvalFailure(Failure):
-    pass
-
-
-class BuildFailure(Failure):
-    pass
-
-
-class UploadFailure(Failure):
-    pass
-
-
-class DownloadFailure(Failure):
-    pass
-
-
-class CachixFailure(Failure):
-    pass
-
-
 T = TypeVar("T")
 
 
@@ -697,7 +711,7 @@ class StopTask:
 async def run_evaluation(
     eval_proc: Process,
     build_queue: Queue[Job | StopTask],
-    failures: list[Failure],
+    result: list[Result],
     opts: Options,
 ) -> int:
     assert eval_proc.stdout
@@ -705,12 +719,22 @@ async def run_evaluation(
         logger.debug(line.decode())
         try:
             job = json.loads(line)
-        except json.JSONDecodeError:
-            die(f"Failed to parse line of nix-eval-jobs output: {line.decode()}")
+        except json.JSONDecodeError as e:
+            msg = f"Failed to parse line of nix-eval-jobs output: {line.decode()}"
+            raise Error(msg) from e
         error = job.get("error")
         attr = job.get("attr", "unknown-flake-attribute")
+        result.append(
+            Result(
+                result_type=ResultType.EVAL,
+                attr=attr,
+                success=error is None,
+                # TODO: maybe add this to nix-eval-jobs?
+                duration=0.0,
+                error=error,
+            )
+        )
         if error:
-            failures.append(EvalFailure(attr, error))
             continue
         is_cached = job.get("isCached", False)
         if is_cached:
@@ -720,7 +744,8 @@ async def run_evaluation(
             continue
         drv_path = job.get("drvPath")
         if not drv_path:
-            die(f"nix-eval-jobs did not return a drvPath: {line.decode()}")
+            msg = f"nix-eval-jobs did not return a drvPath: {line.decode()}"
+            raise Error(msg)
         outputs = job.get("outputs", {})
         build_queue.put_nowait(Job(attr, drv_path, outputs))
     return await eval_proc.wait()
@@ -733,7 +758,7 @@ async def run_builds(
     upload_queue: QueueWithContext[Build | StopTask],
     cachix_queue: QueueWithContext[Build | StopTask],
     download_queue: QueueWithContext[Build | StopTask],
-    failures: list[Failure],
+    results: list[Result],
     opts: Options,
 ) -> int:
     drv_paths: set[Any] = set()
@@ -749,19 +774,29 @@ async def run_builds(
                 continue
             drv_paths.add(job.drv_path)
             build = Build(job.attr, job.drv_path, job.outputs)
+            start_time = timeit.default_timer()
             rc = await build.build(stack, build_output, opts)
-            if rc == 0:
-                upload_queue.put_nowait(build)
-                download_queue.put_nowait(build)
-                cachix_queue.put_nowait(build)
-            else:
-                failures.append(BuildFailure(build.attr, f"build exited with {rc}"))
+            results.append(
+                Result(
+                    result_type=ResultType.BUILD,
+                    attr=job.attr,
+                    success=rc == 0,
+                    duration=start_time - timeit.default_timer(),
+                    # TODO: add log output here
+                    error=f"build exited with {rc}" if rc != 0 else None,
+                )
+            )
+            if rc != 0:
+                continue
+            upload_queue.put_nowait(build)
+            download_queue.put_nowait(build)
+            cachix_queue.put_nowait(build)
 
 
 async def run_uploads(
     stack: AsyncExitStack,
     upload_queue: QueueWithContext[Build | StopTask],
-    failures: list[Failure],
+    results: list[Result],
     opts: Options,
 ) -> int:
     while True:
@@ -769,15 +804,24 @@ async def run_uploads(
             if isinstance(build, StopTask):
                 logger.debug("finish upload task")
                 return 0
+            start_time = timeit.default_timer()
             rc = await build.upload(stack, opts)
-            if rc != 0:
-                failures.append(UploadFailure(build.attr, f"upload exited with {rc}"))
+            results.append(
+                Result(
+                    result_type=ResultType.UPLOAD,
+                    attr=build.attr,
+                    success=rc == 0,
+                    duration=start_time - timeit.default_timer(),
+                    # TODO: add log output here
+                    error=f"upload exited with {rc}" if rc != 0 else None,
+                )
+            )
 
 
 async def run_cachix_upload(
     cachix_queue: QueueWithContext[Build | StopTask],
     cachix_socket_path: Path | None,
-    failures: list[Failure],
+    results: list[Result],
     opts: Options,
 ) -> int:
     while True:
@@ -785,17 +829,23 @@ async def run_cachix_upload(
             if isinstance(build, StopTask):
                 logger.debug("finish cachix upload task")
                 return 0
+            start_time = timeit.default_timer()
             rc = await build.upload_cachix(cachix_socket_path, opts)
-            if rc != 0:
-                failures.append(
-                    UploadFailure(build.attr, f"cachix upload exited with {rc}")
+            results.append(
+                Result(
+                    result_type=ResultType.CACHIX,
+                    attr=build.attr,
+                    success=rc == 0,
+                    duration=start_time - timeit.default_timer(),
+                    error=f"cachix upload exited with {rc}" if rc != 0 else None,
                 )
+            )
 
 
 async def run_downloads(
     stack: AsyncExitStack,
     download_queue: QueueWithContext[Build | StopTask],
-    failures: list[Failure],
+    results: list[Result],
     opts: Options,
 ) -> int:
     while True:
@@ -803,11 +853,17 @@ async def run_downloads(
             if isinstance(build, StopTask):
                 logger.debug("finish download task")
                 return 0
+            start_time = timeit.default_timer()
             rc = await build.download(stack, opts)
-            if rc != 0:
-                failures.append(
-                    DownloadFailure(build.attr, f"download exited with {rc}")
+            results.append(
+                Result(
+                    result_type=ResultType.DOWNLOAD,
+                    attr=build.attr,
+                    success=rc == 0,
+                    duration=start_time - timeit.default_timer(),
+                    error=f"download exited with {rc}" if rc != 0 else None,
                 )
+            )
 
 
 async def report_progress(
@@ -831,6 +887,13 @@ async def report_progress(
     return 0
 
 
+@dataclass
+class Summary:
+    successes: int = 0
+    failures: int = 0
+    failed_attrs: list[str] = field(default_factory=list)
+
+
 async def run(stack: AsyncExitStack, opts: Options) -> int:
     if opts.remote:
         tmp_dir = await stack.enter_async_context(remote_temp_dir(opts))
@@ -849,7 +912,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         cachix_socket_path = await stack.enter_async_context(
             run_cachix_daemon(stack, tmp_dir, opts.cachix_cache, opts)
         )
-    failures: defaultdict[type, list[Failure]] = defaultdict(list)
+    results: list[Result] = []
     build_queue: QueueWithContext[Job | StopTask] = QueueWithContext()
     cachix_queue: QueueWithContext[Build | StopTask] = QueueWithContext()
     upload_queue: QueueWithContext[Build | StopTask] = QueueWithContext()
@@ -858,9 +921,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     async with TaskGroup() as tg:
         tasks = []
         tasks.append(
-            tg.create_task(
-                run_evaluation(eval_proc, build_queue, failures[EvalFailure], opts)
-            )
+            tg.create_task(run_evaluation(eval_proc, build_queue, results, opts))
         )
         evaluation = tasks[0]
         build_output = sys.stdout.buffer
@@ -877,7 +938,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                         upload_queue,
                         cachix_queue,
                         download_queue,
-                        failures[BuildFailure],
+                        results,
                         opts,
                     ),
                     name=f"build-{i}",
@@ -885,7 +946,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             )
             tasks.append(
                 tg.create_task(
-                    run_uploads(stack, upload_queue, failures[UploadFailure], opts),
+                    run_uploads(stack, upload_queue, results, opts),
                     name=f"upload-{i}",
                 )
             )
@@ -894,7 +955,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                     run_cachix_upload(
                         cachix_queue,
                         cachix_socket_path,
-                        failures[CachixFailure],
+                        results,
                         opts,
                     ),
                     name=f"cachix-{i}",
@@ -902,9 +963,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             )
             tasks.append(
                 tg.create_task(
-                    run_downloads(
-                        stack, download_queue, failures[DownloadFailure], opts
-                    ),
+                    run_downloads(stack, download_queue, results, opts),
                     name=f"download-{i}",
                 )
             )
@@ -948,12 +1007,25 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             assert task.done(), f"Task {task.get_name()} is not done"
 
     rc = 0
-    for failure_type in [EvalFailure, BuildFailure, UploadFailure, DownloadFailure]:
-        for failure in failures[failure_type]:
-            logger.error(
-                f"{failure_type.__name__} for {failure.attr}: {failure.error_message}"
-            )
+    stats_by_type = defaultdict(Summary)
+    for r in results:
+        stats = stats_by_type[r.result_type]
+        stats.successes += 1 if r.success else 0
+        stats.failures += 1 if not r.success else 0
+        stats.failed_attrs.append(r.attr)
+        if not r.success:
             rc = 1
+    for result_type, summary in stats_by_type.items():
+        if summary.failures == 0:
+            continue
+        logger.error(
+            f"{result_type.name}: {summary.successes} successes, {summary.failures} failures"
+        )
+        failed_attrs = [
+            f"{opts.flake_url}#{opts.flake_fragment}.{attr}"
+            for attr in summary.failed_attrs
+        ]
+        logger.error(f"Failed attributes: {' '.join(failed_attrs)}")
     if eval_rc != 0:
         logger.error(f"nix-eval-jobs exited with {eval_proc.returncode}")
         rc = 1
@@ -965,7 +1037,84 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         logger.error(f"nix-output-monitor exited with {output_monitor.returncode}")
         rc = 1
 
+    if opts.result_file:
+        with opts.result_file.open("w") as f:
+            if opts.result_format == ResultFormat.JSON:
+                dump_json(f, results)
+            elif opts.result_format == ResultFormat.JUNIT:
+                dump_junit_xml(f, opts.flake_url, opts.flake_fragment, results)
+
     return rc
+
+
+def capitalize_first_letter(s: str) -> str:
+    return s[0].upper() + s[1:].lower()
+
+
+def dump_json(file: IO[str], results: list[Result]) -> None:
+    json.dump(
+        {
+            "results": [
+                {
+                    "type": r.result_type.name,
+                    "attr": r.attr,
+                    "success": r.success,
+                    "duration": r.duration,
+                    "error": r.error,
+                }
+                for r in results
+            ]
+        },
+        file,
+        indent=2,
+        sort_keys=True,
+    )
+
+
+def dump_junit_xml(
+    file: IO[str], flake_url: str, flake_fragment: str, build_results: list[Result]
+) -> None:
+    """
+    Generates a JUnit XML report based on the results of Nix builds.
+
+    Args:
+        build_results (List[BuildResult]): A list of BuildResult instances containing build result data.
+        output_file (str): The name of the output file where the XML report will be written.
+    """
+    testsuites = ET.Element("testsuites")
+    testsuite = ET.SubElement(
+        testsuites,
+        "testsuite",
+        {
+            "name": f"{flake_url}#{flake_fragment}",
+            "tests": str(len(build_results)),
+            "failures": str(sum(1 for r in build_results if not r.success)),
+        },
+    )
+
+    for result in build_results:
+        testcase = ET.SubElement(
+            testsuite,
+            "testcase",
+            {
+                "classname": capitalize_first_letter(result.result_type.name),
+                "name": result.attr,
+                "time": str(result.duration),
+            },
+        )
+
+        if not result.success:
+            failure = ET.SubElement(
+                testcase,
+                "failure",
+                {
+                    "message": result.error or "<no message>",
+                    "type": "BuildFailure",
+                },
+            )
+            failure.text = result.error
+
+    ET.ElementTree(testsuites).write(file, encoding="unicode")
 
 
 async def async_main(args: list[str]) -> int:
@@ -990,4 +1139,7 @@ def main() -> None:
         sys.exit(asyncio.run(async_main(sys.argv[1:])))
     except KeyboardInterrupt as e:
         logger.info(f"nix-fast-build was canceled by the user ({e})")
+        sys.exit(1)
+    except Error:
+        logger.exception("nix-fast-build failed")
         sys.exit(1)

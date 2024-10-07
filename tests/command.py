@@ -48,7 +48,7 @@ class Command:
                 os.killpg(os.getpgid(p.pid), signal.SIGKILL)
 
 
-@pytest.fixture()
+@pytest.fixture
 def command() -> Iterator[Command]:
     """
     Starts a background command. The process is automatically terminated in the end.

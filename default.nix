@@ -1,6 +1,17 @@
-{ python311, makeWrapper, nix-eval-jobs, nix-output-monitor, lib, bashInteractive }:
+{
+  python311,
+  makeWrapper,
+  nix-eval-jobs,
+  nix-output-monitor,
+  lib,
+  bashInteractive,
+}:
 let
-  path = lib.makeBinPath [ nix-eval-jobs nix-eval-jobs.nix nix-output-monitor ];
+  path = lib.makeBinPath [
+    nix-eval-jobs
+    nix-eval-jobs.nix
+    nix-output-monitor
+  ];
 in
 python311.pkgs.buildPythonApplication {
   pname = "nix-fast-build";
