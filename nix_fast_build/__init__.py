@@ -650,7 +650,7 @@ class Build:
                 *nix_shell("nixpkgs#attic-client", "attic"),
                 "push",
                 opts.attic_cache,
-                *list(self.outputs.values()),
+                self.outputs["out"],
             ],
             opts,
         )
