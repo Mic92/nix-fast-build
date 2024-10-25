@@ -139,6 +139,19 @@ set. These environment variables are currently not propagated to ssh when using
 the `--remote` flag, instead the user is expected that cachix credentials are
 configured on the remote machine.
 
+## Attic support
+
+nix-fast-build can upload to attic like this:
+
+```console
+$ nix-fast-build --attic-cache mic92
+```
+
+nix-fast-build assumes that your current machine is either logged in to attic.
+Authentication is not propagated to ssh when using the `--remote` flag, instead
+the user is expected that attic credentials are configured on the remote
+machine.
+
 ## Machine-readable builds results
 
 nix-fast-build supports both its own json format and junit:
@@ -175,7 +188,8 @@ nix-shell -p python3Packages.junit2html --run 'junit2html result.xml result.html
 ```console
 usage: nix-fast-build [-h] [-f FLAKE] [-j MAX_JOBS] [--option name value]
                       [--remote-ssh-option name value]
-                      [--cachix-cache CACHIX_CACHE] [--no-nom]
+                      [--cachix-cache CACHIX_CACHE] 
+                      [--attic-cache ATTIC_CACHE] [--no-nom]
                       [--systems SYSTEMS] [--retries RETRIES] [--no-link]
                       [--out-link OUT_LINK] [--remote REMOTE]
                       [--always-upload-source] [--no-download] [--skip-cached]
@@ -197,6 +211,8 @@ options:
                         ssh option when accessing remote
   --cachix-cache CACHIX_CACHE
                         Cachix cache to upload to
+  --attic-cache ATTIC_CACHE
+                        Attic cache to upload to
   --no-nom              Don't use nix-output-monitor to print build output
                         (default: false)
   --systems SYSTEMS     Space-separated list of systems to build for (default:
