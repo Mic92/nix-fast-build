@@ -64,6 +64,21 @@ def test_build_json() -> None:
         assert rc == 0
 
 
+def test_reference_lock_file() -> None:
+    """--reference-lock-file is forwarded to nix-eval-jobs."""
+    # Pointing at the project's own lock file must behave like a normal build.
+    rc = cli(
+        [
+            "--option",
+            "builders",
+            "",
+            "--reference-lock-file",
+            str(TEST_ROOT.parent / "flake.lock"),
+        ]
+    )
+    assert rc == 0
+
+
 def test_eval_error() -> None:
     rc = cli(["--option", "builders", "", "--flake", ".#legacyPackages"])
     assert rc == 1

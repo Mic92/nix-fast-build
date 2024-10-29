@@ -98,6 +98,8 @@ class Options:
     override_inputs: list[list[str]] = field(default_factory=list)
     select_expr: str | None = None
 
+    reference_lock_file: str | None = None
+
     cachix_cache: str | None = None
 
     attic_cache: str | None = None
@@ -414,6 +416,12 @@ async def parse_args(args: list[str]) -> Options:
             "Example: 'checks: builtins.removeAttrs checks [\"slow-test\"]'"
         ),
     )
+    parser.add_argument(
+        "--reference-lock-file",
+        type=str,
+        default=None,
+        help="Read the given lock file instead of `flake.lock` within the top-level flake.",
+    )
 
     a = parser.parse_args(args)
 
@@ -539,6 +547,7 @@ async def parse_args(args: list[str]) -> Options:
         result_file=a.result_file,
         override_inputs=a.override_input,
         select_expr=a.select,
+        reference_lock_file=a.reference_lock_file,
     )
 
 
@@ -711,6 +720,8 @@ async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
                 args.append("--override-input")
                 args.append(override[0])
                 args.append(override[1])
+        if opts.reference_lock_file:
+            args.extend(["--reference-lock-file", opts.reference_lock_file])
     else:
         # Non-flake mode: pass expression file as positional arg
         args.extend(opts.expr_args)
