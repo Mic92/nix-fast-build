@@ -81,6 +81,7 @@ class Options:
     out_link: str = "result"
     result_format: ResultFormat = ResultFormat.JSON
     result_file: Path | None = None
+    reference_lock_file: str | None = None
 
     cachix_cache: str | None = None
 
@@ -266,6 +267,12 @@ async def parse_args(args: list[str]) -> Options:
         default="json",
         help="Format of the build result file",
     )
+    parser.add_argument(
+        "--reference-lock-file",
+        type=str,
+        default=None,
+        help="Read the given lock file instead of `flake.lock` within the top-level flake.",
+    )
 
     a = parser.parse_args(args)
 
@@ -322,6 +329,7 @@ async def parse_args(args: list[str]) -> Options:
         out_link=a.out_link,
         result_format=ResultFormat[a.result_format.upper()],
         result_file=a.result_file,
+        reference_lock_file=a.reference_lock_file,
     )
 
 
@@ -480,6 +488,8 @@ async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
         f"{opts.flake_url}#{opts.flake_fragment}",
         *opts.options,
     ]
+    if opts.reference_lock_file:
+        args.extend(["--reference-lock-file", opts.reference_lock_file])
     if opts.skip_cached:
         args.append("--check-cache-status")
     if opts.remote:
