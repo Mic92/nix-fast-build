@@ -84,6 +84,8 @@ class Options:
 
     cachix_cache: str | None = None
 
+    attic_cache: str | None = None
+
     @property
     def remote_url(self) -> None | str:
         if self.remote is None:
@@ -97,6 +99,7 @@ class ResultType(enum.Enum):
     UPLOAD = enum.auto()
     DOWNLOAD = enum.auto()
     CACHIX = enum.auto()
+    ATTIC = enum.auto()
 
 
 @dataclass
@@ -181,6 +184,11 @@ async def parse_args(args: list[str]) -> Options:
     parser.add_argument(
         "--cachix-cache",
         help="Cachix cache to upload to",
+        default=None,
+    )
+    parser.add_argument(
+        "--attic-cache",
+        help="Attic cache to upload to",
         default=None,
     )
     parser.add_argument(
@@ -318,6 +326,7 @@ async def parse_args(args: list[str]) -> Options:
         eval_workers=a.eval_workers,
         copy_to=a.copy_to,
         cachix_cache=a.cachix_cache,
+        attic_cache=a.attic_cache,
         no_link=a.no_link,
         out_link=a.out_link,
         result_format=ResultFormat[a.result_format.upper()],
@@ -633,6 +642,22 @@ class Build:
         proc = await asyncio.create_subprocess_exec(*cmd)
         return await proc.wait()
 
+    async def upload_attic(self, opts: Options) -> int:
+        if opts.attic_cache is None:
+            return 0
+        cmd = maybe_remote(
+            [
+                *nix_shell("nixpkgs#attic-client", "attic"),
+                "push",
+                opts.attic_cache,
+                self.outputs["out"],
+            ],
+            opts,
+        )
+        logger.debug("run %s", shlex.join(cmd))
+        proc = await asyncio.create_subprocess_exec(*cmd)
+        return await proc.wait()
+
     async def download(self, exit_stack: AsyncExitStack, opts: Options) -> int:
         if not opts.remote_url or not opts.download:
             return 0
@@ -757,6 +782,7 @@ async def run_builds(
     build_queue: QueueWithContext[Job | StopTask],
     upload_queue: QueueWithContext[Build | StopTask],
     cachix_queue: QueueWithContext[Build | StopTask],
+    attic_queue: QueueWithContext[Build | StopTask],
     download_queue: QueueWithContext[Build | StopTask],
     results: list[Result],
     opts: Options,
@@ -791,6 +817,7 @@ async def run_builds(
             upload_queue.put_nowait(build)
             download_queue.put_nowait(build)
             cachix_queue.put_nowait(build)
+            attic_queue.put_nowait(build)
 
 
 async def run_uploads(
@@ -838,6 +865,29 @@ async def run_cachix_upload(
                     success=rc == 0,
                     duration=start_time - timeit.default_timer(),
                     error=f"cachix upload exited with {rc}" if rc != 0 else None,
+                )
+            )
+
+
+async def run_attic_upload(
+    attic_queue: QueueWithContext[Build | StopTask],
+    results: list[Result],
+    opts: Options,
+) -> int:
+    while True:
+        async with attic_queue.get_context() as build:
+            if isinstance(build, StopTask):
+                logger.debug("finish attic upload task")
+                return 0
+            start_time = timeit.default_timer()
+            rc = await build.upload_attic(opts)
+            results.append(
+                Result(
+                    result_type=ResultType.ATTIC,
+                    attr=build.attr,
+                    success=rc == 0,
+                    duration=start_time - timeit.default_timer(),
+                    error=f"attic upload exited with {rc}" if rc != 0 else None,
                 )
             )
 
@@ -915,6 +965,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     results: list[Result] = []
     build_queue: QueueWithContext[Job | StopTask] = QueueWithContext()
     cachix_queue: QueueWithContext[Build | StopTask] = QueueWithContext()
+    attic_queue: QueueWithContext[Build | StopTask] = QueueWithContext()
     upload_queue: QueueWithContext[Build | StopTask] = QueueWithContext()
     download_queue: QueueWithContext[Build | StopTask] = QueueWithContext()
 
@@ -937,6 +988,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                         build_queue,
                         upload_queue,
                         cachix_queue,
+                        attic_queue,
                         download_queue,
                         results,
                         opts,
@@ -959,6 +1011,16 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                         opts,
                     ),
                     name=f"cachix-{i}",
+                )
+            )
+            tasks.append(
+                tg.create_task(
+                    run_attic_upload(
+                        attic_queue,
+                        results,
+                        opts,
+                    ),
+                    name=f"attic-{i}",
                 )
             )
             tasks.append(
@@ -992,6 +1054,11 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         for _ in range(opts.max_jobs):
             cachix_queue.put_nowait(StopTask())
         await cachix_queue.join()
+
+        logger.debug("Uploads finished, waiting for attic uploads to finish...")
+        for _ in range(opts.max_jobs):
+            attic_queue.put_nowait(StopTask())
+        await attic_queue.join()
 
         logger.debug("Uploads finished, waiting for downloads to finish...")
         for _ in range(opts.max_jobs):
