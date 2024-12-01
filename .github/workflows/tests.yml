@@ -8,45 +8,45 @@ jobs:
   self-test:
     strategy:
       matrix:
-        os: [ ubuntu-latest, macos-latest ]
-        nom: [ "", "--no-nom"]
+        os: [ubuntu-latest, macos-latest]
+        nom: ["", "--no-nom"]
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v4
-      with:
+      - uses: actions/checkout@v4
+        with:
           # Nix Flakes doesn't work on shallow clones
           fetch-depth: 0
-    - uses: cachix/install-nix-action@v30
-      with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
-        extra_nix_config: |
-          accept-flake-config = true
-    - name: Self-test
-      run: nix shell --inputs-from . nixpkgs#coreutils -c timeout --verbose 600 nix run . -- ${{ matrix.nom }}
+      - uses: cachix/install-nix-action@v30
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            accept-flake-config = true
+      - name: Self-test
+        run: nix shell --inputs-from . nixpkgs#coreutils -c timeout --verbose 600 nix run . -- ${{ matrix.nom }}
 
-    - name: Self-test (should fail)
-      run: |
-        if nix shell --inputs-from . nixpkgs#coreutils -c timeout --verbose 600 nix run . -- --flake .#legacyPackages ${{ matrix.nom }}; then
-          echo "expect this to fail"
-          false
-        fi
+      - name: Self-test (should fail)
+        run: |
+          if nix shell --inputs-from . nixpkgs#coreutils -c timeout --verbose 600 nix run . -- --flake .#legacyPackages ${{ matrix.nom }}; then
+            echo "expect this to fail"
+            false
+          fi
   tests:
     strategy:
       matrix:
-        os: [ ubuntu-latest, macos-latest ]
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v4
-      with:
+      - uses: actions/checkout@v4
+        with:
           # Nix Flakes doesn't work on shallow clones
           fetch-depth: 0
-    - uses: cachix/install-nix-action@v30
-      with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
-        extra_nix_config: |
-          accept-flake-config = true
-    - name: Install nix-eval-jobs for remote test
-      run: nix profile install --inputs-from . nixpkgs#nix-eval-jobs
-    - run: command -v nix-eval-jobs && nix-eval-jobs --help
-    - name: Run tests
-      run: nix develop -c pytest ./tests
+      - uses: cachix/install-nix-action@v30
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            accept-flake-config = true
+      - name: Install nix-eval-jobs for remote test
+        run: nix profile install --inputs-from . nixpkgs#nix-eval-jobs
+      - run: command -v nix-eval-jobs && nix-eval-jobs --help
+      - name: Run tests
+        run: nix develop -c pytest ./tests
