@@ -1,0 +1,23 @@
+name: "Update flakes"
+on:
+  repository_dispatch:
+  workflow_dispatch:
+  schedule:
+    - cron: "38 0 * * 0,4"
+permissions:
+  pull-requests: write
+  contents: write
+jobs:
+  createPullRequest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Update flake.lock
+        uses: DeterminateSystems/update-flake-lock@v24
+        with:
+          pr-labels: | # Labels to be set on the PR
+            dependencies
