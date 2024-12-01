@@ -13,7 +13,7 @@
         programs.mypy.enable = true;
         programs.mypy.directories."root".directory = ".";
         programs.deadnix.enable = true;
-        programs.nixfmt.enable = pkgs.lib.meta.availableOn pkgs.stdenv.buildPlatform pkgs.nixfmt-rfc-style.compiler;
+        programs.nixfmt.enable = pkgs.hostPlatform.system != "riscv64-linux";
         programs.ruff.format = true;
         programs.ruff.check = true;
       };
