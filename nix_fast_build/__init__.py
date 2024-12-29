@@ -761,8 +761,10 @@ async def run_evaluation(
         )
         if error:
             continue
-        is_cached = job.get("isCached", False)
-        if is_cached:
+        # Skip remotely cached jobs, but still consider
+        # them for pushing if they are cached locally
+        cache_status = job.get("cacheStatus", "notBuilt")
+        if cache_status == "cached":
             continue
         system = job.get("system")
         if system and system not in opts.systems:
