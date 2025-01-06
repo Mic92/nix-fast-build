@@ -18,3 +18,8 @@ pull_request_rules:
     conditions: []
     actions:
       queue:
+  - name: delete branches 24 hours post-merge
+    conditions:
+      - merged-at < 1 day ago
+    actions:
+      delete_head_branch:
