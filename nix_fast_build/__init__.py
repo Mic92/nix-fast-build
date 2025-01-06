@@ -736,6 +736,7 @@ class StopTask:
 async def run_evaluation(
     eval_proc: Process,
     build_queue: Queue[Job | StopTask],
+    upload_queue: Queue[Build | StopTask],
     result: list[Result],
     opts: Options,
 ) -> int:
@@ -761,9 +762,17 @@ async def run_evaluation(
         )
         if error:
             continue
-        is_cached = job.get("isCached", False)
-        if is_cached:
+        cache_status = job.get("cacheStatus")
+        if cache_status is None:
+            # Legacy attribute
+            if job.get("isCached", False):
+                continue
+        # Skip remotely cached jobs, but still consider
+        # them for pushing if they are cached locally
+        elif cache_status == "cached":
             continue
+        elif cache_status == "local":
+            upload_queue.put_nowait(Build(attr, job["drvPath"], job.get("outputs", {})))
         system = job.get("system")
         if system and system not in opts.systems:
             continue
@@ -972,7 +981,9 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     async with TaskGroup() as tg:
         tasks = []
         tasks.append(
-            tg.create_task(run_evaluation(eval_proc, build_queue, results, opts))
+            tg.create_task(
+                run_evaluation(eval_proc, build_queue, upload_queue, results, opts)
+            )
         )
         evaluation = tasks[0]
         build_output = sys.stdout.buffer
