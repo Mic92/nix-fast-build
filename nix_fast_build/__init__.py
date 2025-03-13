@@ -127,7 +127,7 @@ async def get_nix_config(
     remote: str | None, remote_ssh_options: list[str]
 ) -> dict[str, str]:
     args = _maybe_remote(
-        nix_command(["show-config", "--json"]), remote, remote_ssh_options
+        nix_command(["config", "show", "--json"]), remote, remote_ssh_options
     )
     try:
         proc = await asyncio.create_subprocess_exec(
