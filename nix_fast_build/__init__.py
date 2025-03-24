@@ -1090,8 +1090,8 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         stats = stats_by_type[r.result_type]
         stats.successes += 1 if r.success else 0
         stats.failures += 1 if not r.success else 0
-        stats.failed_attrs.append(r.attr)
         if not r.success:
+            stats.failed_attrs.append(r.attr)
             rc = 1
     for result_type, summary in stats_by_type.items():
         if summary.failures == 0:
