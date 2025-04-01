@@ -816,7 +816,7 @@ async def run_builds(
                     result_type=ResultType.BUILD,
                     attr=job.attr,
                     success=rc == 0,
-                    duration=start_time - timeit.default_timer(),
+                    duration=timeit.default_timer() - start_time,
                     # TODO: add log output here
                     error=f"build exited with {rc}" if rc != 0 else None,
                 )
@@ -847,7 +847,7 @@ async def run_uploads(
                     result_type=ResultType.UPLOAD,
                     attr=build.attr,
                     success=rc == 0,
-                    duration=start_time - timeit.default_timer(),
+                    duration=timeit.default_timer() - start_time,
                     # TODO: add log output here
                     error=f"upload exited with {rc}" if rc != 0 else None,
                 )
@@ -872,7 +872,7 @@ async def run_cachix_upload(
                     result_type=ResultType.CACHIX,
                     attr=build.attr,
                     success=rc == 0,
-                    duration=start_time - timeit.default_timer(),
+                    duration=timeit.default_timer() - start_time,
                     error=f"cachix upload exited with {rc}" if rc != 0 else None,
                 )
             )
@@ -895,7 +895,7 @@ async def run_attic_upload(
                     result_type=ResultType.ATTIC,
                     attr=build.attr,
                     success=rc == 0,
-                    duration=start_time - timeit.default_timer(),
+                    duration=timeit.default_timer() - start_time,
                     error=f"attic upload exited with {rc}" if rc != 0 else None,
                 )
             )
@@ -919,7 +919,7 @@ async def run_downloads(
                     result_type=ResultType.DOWNLOAD,
                     attr=build.attr,
                     success=rc == 0,
-                    duration=start_time - timeit.default_timer(),
+                    duration=timeit.default_timer() - start_time,
                     error=f"download exited with {rc}" if rc != 0 else None,
                 )
             )
@@ -1090,8 +1090,8 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         stats = stats_by_type[r.result_type]
         stats.successes += 1 if r.success else 0
         stats.failures += 1 if not r.success else 0
-        stats.failed_attrs.append(r.attr)
         if not r.success:
+            stats.failed_attrs.append(r.attr)
             rc = 1
     for result_type, summary in stats_by_type.items():
         if summary.failures == 0:
