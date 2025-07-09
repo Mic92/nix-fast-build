@@ -241,4 +241,6 @@ options:
                         File to write build results to
   --result-format {json,junit}
                         Format of the build result file
+  --override-input input_path flake_url
+                        Override a specific flake input (e.g. `dwarffs/nixpkgs`).
 ```
