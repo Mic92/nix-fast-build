@@ -805,6 +805,7 @@ async def run_builds(
                 return 0
             job = next_job
             print(f"  building {job.attr}")
+            sys.stdout.flush()
             if job.drv_path in drv_paths:
                 continue
             drv_paths.add(job.drv_path)
