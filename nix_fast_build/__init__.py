@@ -81,6 +81,7 @@ class Options:
     out_link: str = "result"
     result_format: ResultFormat = ResultFormat.JSON
     result_file: Path | None = None
+    override_inputs: list[list[str]] = field(default_factory=list)
 
     cachix_cache: str | None = None
 
@@ -274,6 +275,13 @@ async def parse_args(args: list[str]) -> Options:
         default="json",
         help="Format of the build result file",
     )
+    parser.add_argument(
+        "--override-input",
+        action="append",
+        nargs=2,
+        metavar=("input_path", "flake_url"),
+        help="Override a specific flake input (e.g. `dwarffs/nixpkgs`).",
+    )
 
     a = parser.parse_args(args)
 
@@ -331,6 +339,7 @@ async def parse_args(args: list[str]) -> Options:
         out_link=a.out_link,
         result_format=ResultFormat[a.result_format.upper()],
         result_file=a.result_file,
+        override_inputs=a.override_input,
     )
 
 
@@ -489,6 +498,11 @@ async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
         f"{opts.flake_url}#{opts.flake_fragment}",
         *opts.options,
     ]
+    if opts.override_inputs:
+        for override in opts.override_inputs:
+            args.append("--override-input")
+            args.append(override[0])
+            args.append(override[1])
     if opts.skip_cached:
         args.append("--check-cache-status")
     if opts.remote:
