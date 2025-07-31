@@ -156,7 +156,7 @@ async def parse_args(args: list[str]) -> Options:
         "-f",
         "--flake",
         default=".#checks",
-        help="Flake url to evaluate/build (default: .#checks",
+        help="Flake url to evaluate/build (default: .#checks)",
     )
     parser.add_argument(
         "-j",
