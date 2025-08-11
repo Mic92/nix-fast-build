@@ -12,7 +12,7 @@ jobs:
         nom: ["", "--no-nom"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Nix Flakes doesn't work on shallow clones
           fetch-depth: 0
@@ -36,7 +36,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Nix Flakes doesn't work on shallow clones
           fetch-depth: 0
