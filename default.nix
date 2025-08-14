@@ -15,7 +15,7 @@ let
 in
 python311.pkgs.buildPythonApplication {
   pname = "nix-fast-build";
-  version = "1.1.0";
+  version = "1.3.0";
   format = "pyproject";
   src = ./.;
   buildInputs = with python311.pkgs; [
