@@ -892,6 +892,9 @@ async def run_uploads(
             if isinstance(build, StopTask):
                 logger.debug("finish upload task")
                 return 0
+            # Skip if copy_to is not configured
+            if not opts.copy_to:
+                continue
             start_time = timeit.default_timer()
             rc = await build.upload(stack, opts)
             results.append(
@@ -917,6 +920,9 @@ async def run_cachix_upload(
             if isinstance(build, StopTask):
                 logger.debug("finish cachix upload task")
                 return 0
+            # Skip if cachix is not configured
+            if cachix_socket_path is None:
+                continue
             start_time = timeit.default_timer()
             rc = await build.upload_cachix(cachix_socket_path, opts)
             results.append(
@@ -940,6 +946,9 @@ async def run_attic_upload(
             if isinstance(build, StopTask):
                 logger.debug("finish attic upload task")
                 return 0
+            # Skip if attic is not configured
+            if opts.attic_cache is None:
+                continue
             start_time = timeit.default_timer()
             rc = await build.upload_attic(opts)
             results.append(
@@ -964,6 +973,9 @@ async def run_downloads(
             if isinstance(build, StopTask):
                 logger.debug("finish download task")
                 return 0
+            # Skip if not using remote or download is disabled
+            if not opts.remote_url or not opts.download:
+                continue
             start_time = timeit.default_timer()
             rc = await build.download(stack, opts)
             results.append(
@@ -1052,6 +1064,9 @@ def write_github_summary(
     lines.append("|------|-----------|----------|")
 
     for result_type, summary in sorted(stats_by_type.items(), key=lambda x: x[0].name):
+        # Only show result types that have actual operations
+        if summary.successes == 0 and summary.failures == 0:
+            continue
         emoji = "✅" if summary.failures == 0 else "❌"
         lines.append(
             f"| {emoji} {result_type.name} | {summary.successes} | {summary.failures} |"
