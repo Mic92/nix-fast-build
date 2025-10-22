@@ -589,6 +589,14 @@ async def run_cachix_daemon_stop(
 
 
 @dataclass
+class BuildResult:
+    """Result of a build operation."""
+
+    return_code: int
+    log_output: str
+
+
+@dataclass
 class Build:
     attr: str
     drv_path: str
@@ -596,8 +604,8 @@ class Build:
 
     async def build(
         self, stack: AsyncExitStack, build_output: IO[str], opts: Options
-    ) -> tuple[int, str]:
-        """Build and return (return_code, log_output)."""
+    ) -> BuildResult:
+        """Build and return BuildResult."""
         proc = await stack.enter_async_context(
             nix_build(self.attr, self.drv_path, build_output, opts)
         )
@@ -607,15 +615,15 @@ class Build:
             rc = await proc.wait()
             if rc == 0:
                 logger.debug(f"build {self.attr} succeeded")
-                return rc, ""
+                return BuildResult(return_code=rc, log_output="")
             logger.warning(f"build {self.attr} exited with {rc}")
 
         # If build failed, get the log using nix log
         if rc != 0:
             log_output = await self.get_build_log(opts)
-            return rc, log_output
+            return BuildResult(return_code=rc, log_output=log_output)
 
-        return rc, ""
+        return BuildResult(return_code=rc, log_output="")
 
     async def get_build_log(self, opts: Options) -> str:
         """Get build log using nix log command."""
@@ -854,18 +862,18 @@ async def run_builds(
             drv_paths.add(job.drv_path)
             build = Build(job.attr, job.drv_path, job.outputs)
             start_time = timeit.default_timer()
-            rc, log_output = await build.build(stack, build_output, opts)
+            build_result = await build.build(stack, build_output, opts)
             results.append(
                 Result(
                     result_type=ResultType.BUILD,
                     attr=job.attr,
-                    success=rc == 0,
+                    success=build_result.return_code == 0,
                     duration=timeit.default_timer() - start_time,
-                    error=f"build exited with {rc}" if rc != 0 else None,
-                    log_output=log_output if rc != 0 else None,
+                    error=f"build exited with {build_result.return_code}" if build_result.return_code != 0 else None,
+                    log_output=build_result.log_output if build_result.return_code != 0 else None,
                 )
             )
-            if rc != 0:
+            if build_result.return_code != 0:
                 continue
             upload_queue.put_nowait(build)
             download_queue.put_nowait(build)
