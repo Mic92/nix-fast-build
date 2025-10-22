@@ -183,6 +183,42 @@ nix-fast-build --result-format junit --result-file result.xml
 nix-shell -p python3Packages.junit2html --run 'junit2html result.xml result.html'
 ```
 
+## GitHub Actions Job Summaries
+
+nix-fast-build can automatically generate GitHub Actions job summaries when running
+in GitHub Actions. The summary includes:
+
+- Overall build status
+- Success/failure counts by operation type (EVAL, BUILD, UPLOAD, etc.)
+- Detailed sections for failed builds with logs
+
+### Automatic Detection
+
+When running in GitHub Actions (detected via `GITHUB_ACTIONS` environment variable),
+nix-fast-build will automatically write a summary to the file specified by the
+`GITHUB_STEP_SUMMARY` environment variable:
+
+```yaml
+- name: Build with nix-fast-build
+  run: nix-fast-build --no-nom --skip-cached
+```
+
+### Custom Summary File
+
+You can override the summary file location with the `--github-summary` flag:
+
+```console
+nix-fast-build --github-summary /tmp/summary.md
+```
+
+This is useful for:
+- Testing the summary generation locally
+- Using custom locations in CI environments
+- Generating summaries outside of GitHub Actions
+
+The summary includes collapsible log sections for failed builds, making it easy to
+diagnose issues without leaving the GitHub Actions UI.
+
 ## Reference
 
 ```console
@@ -198,6 +234,7 @@ usage: nix-fast-build [-h] [-f FLAKE] [-j MAX_JOBS] [--option name value]
                       [--eval-workers EVAL_WORKERS]
                       [--result-file RESULT_FILE]
                       [--result-format {json,junit}]
+                      [--github-summary GITHUB_SUMMARY]
 
 options:
   -h, --help            show this help message and exit
@@ -241,6 +278,9 @@ options:
                         File to write build results to
   --result-format {json,junit}
                         Format of the build result file
+  --github-summary GITHUB_SUMMARY
+                        File to write GitHub Actions job summary to (defaults to 
+                        $GITHUB_STEP_SUMMARY if set)
   --override-input input_path flake_url
                         Override a specific flake input (e.g. `dwarffs/nixpkgs`).
 ```
