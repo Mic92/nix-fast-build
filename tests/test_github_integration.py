@@ -1,4 +1,5 @@
 """Integration test for GitHub Actions summary feature."""
+
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -26,7 +27,9 @@ def test_github_actions_workflow() -> None:
             os.environ["GITHUB_STEP_SUMMARY"] = str(summary_path)
 
             # Create options
-            opts = Options(flake_url="github:example/repo", flake_fragment="checks.x86_64-linux")
+            opts = Options(
+                flake_url="github:example/repo", flake_fragment="checks.x86_64-linux"
+            )
 
             # Verify it picks up the environment variable
             github_summary_file = get_github_summary_file()
@@ -145,6 +148,8 @@ def test_long_log_truncation() -> None:
         assert "truncated, showing last 100 lines" in content
 
         # Verify only last 100 lines + truncation message are present
-        assert "log line 50" in content  # Should be present (line 50 onwards, first of last 100)
+        assert (
+            "log line 50" in content
+        )  # Should be present (line 50 onwards, first of last 100)
         assert "log line 49" not in content  # Should be truncated
         assert "log line 149" in content  # Last line should be present

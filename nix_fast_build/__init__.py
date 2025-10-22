@@ -1063,7 +1063,10 @@ def write_github_summary(
                 # Truncate very long logs (keep last 100 lines)
                 log_lines = result.log_output.strip().split("\n")
                 if len(log_lines) > 100:
-                    log_lines = ["... (truncated, showing last 100 lines) ...", *log_lines[-100:]]
+                    log_lines = [
+                        "... (truncated, showing last 100 lines) ...",
+                        *log_lines[-100:],
+                    ]
                 lines.append("\n<details>")
                 lines.append(f"<summary>Build Log ({len(log_lines)} lines)</summary>\n")
                 lines.append("```")
