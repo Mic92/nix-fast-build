@@ -82,6 +82,7 @@ class Options:
     result_format: ResultFormat = ResultFormat.JSON
     result_file: Path | None = None
     override_inputs: list[list[str]] = field(default_factory=list)
+    github_summary: str | None = None
 
     cachix_cache: str | None = None
 
@@ -110,6 +111,7 @@ class Result:
     success: bool
     duration: float
     error: str | None
+    log_output: str | None = None
 
 
 def _maybe_remote(
@@ -282,6 +284,12 @@ async def parse_args(args: list[str]) -> Options:
         metavar=("input_path", "flake_url"),
         help="Override a specific flake input (e.g. `dwarffs/nixpkgs`).",
     )
+    parser.add_argument(
+        "--github-summary",
+        type=str,
+        default=None,
+        help="File to write GitHub Actions job summary to (defaults to $GITHUB_STEP_SUMMARY if set)",
+    )
 
     a = parser.parse_args(args)
 
@@ -340,6 +348,7 @@ async def parse_args(args: list[str]) -> Options:
         result_format=ResultFormat[a.result_format.upper()],
         result_file=a.result_file,
         override_inputs=a.override_input,
+        github_summary=a.github_summary,
     )
 
 
@@ -595,18 +604,40 @@ class Build:
 
     async def build(
         self, stack: AsyncExitStack, build_output: IO[str], opts: Options
-    ) -> int:
+    ) -> tuple[int, str]:
+        """Build and return (return_code, stderr_output)."""
+        # Create a temporary file to capture stderr
+        stderr_lines: list[bytes] = []
+
         proc = await stack.enter_async_context(
             nix_build(self.attr, self.drv_path, build_output, opts)
         )
+
+        # Capture stderr if available
+        if proc.stderr:
+            async def capture_stderr() -> None:
+                assert proc.stderr
+                async for line in proc.stderr:
+                    stderr_lines.append(line)
+
+            # Start capturing stderr in background
+            stderr_task = asyncio.create_task(capture_stderr())
+        else:
+            stderr_task = None
+
         rc = 0
         for _ in range(opts.retries + 1):
             rc = await proc.wait()
             if rc == 0:
                 logger.debug(f"build {self.attr} succeeded")
-                return rc
+                if stderr_task:
+                    await stderr_task
+                return rc, b"".join(stderr_lines).decode("utf-8", errors="replace")
             logger.warning(f"build {self.attr} exited with {rc}")
-        return rc
+
+        if stderr_task:
+            await stderr_task
+        return rc, b"".join(stderr_lines).decode("utf-8", errors="replace")
 
     async def nix_copy(
         self, args: list[str], exit_stack: AsyncExitStack, opts: Options
@@ -728,7 +759,10 @@ async def nix_build(
 
     args = maybe_remote(args, opts)
     logger.debug("run %s", shlex.join(args))
-    proc = await asyncio.create_subprocess_exec(*args, stderr=stderr)
+    # Always capture stderr to get build logs for GitHub summary
+    proc = await asyncio.create_subprocess_exec(
+        *args, stderr=asyncio.subprocess.PIPE if stderr is None else stderr
+    )
     try:
         yield proc
     finally:
@@ -825,15 +859,15 @@ async def run_builds(
             drv_paths.add(job.drv_path)
             build = Build(job.attr, job.drv_path, job.outputs)
             start_time = timeit.default_timer()
-            rc = await build.build(stack, build_output, opts)
+            rc, log_output = await build.build(stack, build_output, opts)
             results.append(
                 Result(
                     result_type=ResultType.BUILD,
                     attr=job.attr,
                     success=rc == 0,
                     duration=timeit.default_timer() - start_time,
-                    # TODO: add log output here
                     error=f"build exited with {rc}" if rc != 0 else None,
+                    log_output=log_output if rc != 0 else None,
                 )
             )
             if rc != 0:
@@ -968,6 +1002,93 @@ class Summary:
     failed_attrs: list[str] = field(default_factory=list)
 
 
+def is_github_actions() -> bool:
+    """Detect if running inside GitHub Actions."""
+    return os.environ.get("GITHUB_ACTIONS") == "true"
+
+
+def get_github_summary_file(opts: Options) -> Path | None:
+    """Get the GitHub summary file path."""
+    # Use explicit argument if provided
+    if opts.github_summary:
+        return Path(opts.github_summary)
+    # Otherwise use GITHUB_STEP_SUMMARY if in GitHub Actions
+    if is_github_actions():
+        summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary_path:
+            return Path(summary_path)
+    return None
+
+
+def write_github_summary(
+    summary_file: Path, opts: Options, results: list[Result], rc: int
+) -> None:
+    """Write GitHub Actions job summary in markdown format."""
+    # Group results by type
+    stats_by_type: dict[ResultType, Summary] = defaultdict(Summary)
+    failed_builds: list[Result] = []
+
+    for r in results:
+        stats = stats_by_type[r.result_type]
+        stats.successes += 1 if r.success else 0
+        stats.failures += 1 if not r.success else 0
+        if not r.success:
+            stats.failed_attrs.append(r.attr)
+            if r.result_type == ResultType.BUILD:
+                failed_builds.append(r)
+
+    # Build the markdown content
+    lines = []
+    lines.append("# nix-fast-build Results\n")
+
+    # Overall status
+    if rc == 0:
+        lines.append("## ✅ Build Successful\n")
+    else:
+        lines.append("## ❌ Build Failed\n")
+
+    # Summary table
+    lines.append("## Summary\n")
+    lines.append("| Type | Successes | Failures |")
+    lines.append("|------|-----------|----------|")
+
+    for result_type, summary in sorted(stats_by_type.items(), key=lambda x: x[0].name):
+        emoji = "✅" if summary.failures == 0 else "❌"
+        lines.append(
+            f"| {emoji} {result_type.name} | {summary.successes} | {summary.failures} |"
+        )
+
+    # Failed builds section with logs
+    if failed_builds:
+        lines.append("\n## Failed Builds\n")
+        for result in failed_builds:
+            attr_name = f"{opts.flake_url}#{opts.flake_fragment}.{result.attr}"
+            lines.append(f"\n### ❌ {result.attr}\n")
+            lines.append(f"**Full attribute:** `{attr_name}`\n")
+            lines.append(f"**Duration:** {result.duration:.2f}s\n")
+            if result.error:
+                lines.append(f"**Error:** {result.error}\n")
+            if result.log_output:
+                # Truncate very long logs (keep last 100 lines)
+                log_lines = result.log_output.strip().split("\n")
+                if len(log_lines) > 100:
+                    log_lines = ["... (truncated, showing last 100 lines) ...", *log_lines[-100:]]
+                lines.append("\n<details>")
+                lines.append(f"<summary>Build Log ({len(log_lines)} lines)</summary>\n")
+                lines.append("```")
+                lines.extend(log_lines)
+                lines.append("```")
+                lines.append("</details>\n")
+
+    # Write to file
+    try:
+        with summary_file.open("a") as f:
+            f.write("\n".join(lines))
+        logger.info(f"GitHub summary written to {summary_file}")
+    except OSError as e:
+        logger.warning(f"Failed to write GitHub summary to {summary_file}: {e}")
+
+
 async def run(stack: AsyncExitStack, opts: Options) -> int:
     if opts.remote:
         tmp_dir = await stack.enter_async_context(remote_temp_dir(opts))
@@ -1100,7 +1221,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             assert task.done(), f"Task {task.get_name()} is not done"
 
     rc = 0
-    stats_by_type = defaultdict(Summary)
+    stats_by_type: dict[ResultType, Summary] = defaultdict(Summary)
     for r in results:
         stats = stats_by_type[r.result_type]
         stats.successes += 1 if r.success else 0
@@ -1136,6 +1257,11 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                 dump_json(f, results)
             elif opts.result_format == ResultFormat.JUNIT:
                 dump_junit_xml(f, opts.flake_url, opts.flake_fragment, results)
+
+    # Write GitHub Actions summary if configured
+    github_summary_file = get_github_summary_file(opts)
+    if github_summary_file:
+        write_github_summary(github_summary_file, opts, results, rc)
 
     return rc
 
