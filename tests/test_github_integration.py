@@ -25,11 +25,11 @@ def test_github_actions_workflow() -> None:
             os.environ["GITHUB_ACTIONS"] = "true"
             os.environ["GITHUB_STEP_SUMMARY"] = str(summary_path)
 
-            # Create options without explicit github_summary (should use env var)
+            # Create options
             opts = Options(flake_url="github:example/repo", flake_fragment="checks.x86_64-linux")
 
             # Verify it picks up the environment variable
-            github_summary_file = get_github_summary_file(opts)
+            github_summary_file = get_github_summary_file()
             assert github_summary_file == summary_path
 
             # Simulate build results
@@ -104,40 +104,6 @@ def test_github_actions_workflow() -> None:
             assert "missing dependency: libfoo" in content
             assert "<details>" in content
             assert "Build Log" in content
-
-    finally:
-        # Restore original environment
-        if original_actions is None:
-            os.environ.pop("GITHUB_ACTIONS", None)
-        else:
-            os.environ["GITHUB_ACTIONS"] = original_actions
-        if original_summary is None:
-            os.environ.pop("GITHUB_STEP_SUMMARY", None)
-        else:
-            os.environ["GITHUB_STEP_SUMMARY"] = original_summary
-
-
-def test_explicit_github_summary_overrides_env() -> None:
-    """Test that explicit --github-summary flag overrides environment variable."""
-    original_actions = os.environ.get("GITHUB_ACTIONS")
-    original_summary = os.environ.get("GITHUB_STEP_SUMMARY")
-
-    try:
-        with TemporaryDirectory() as d:
-            env_path = Path(d) / "env_summary.md"
-            explicit_path = Path(d) / "explicit_summary.md"
-
-            # Set up GitHub Actions environment
-            os.environ["GITHUB_ACTIONS"] = "true"
-            os.environ["GITHUB_STEP_SUMMARY"] = str(env_path)
-
-            # Create options with explicit github_summary
-            opts = Options(github_summary=str(explicit_path))
-
-            # Verify it uses the explicit path, not the env var
-            github_summary_file = get_github_summary_file(opts)
-            assert github_summary_file == explicit_path
-            assert github_summary_file != env_path
 
     finally:
         # Restore original environment

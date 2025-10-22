@@ -82,7 +82,6 @@ class Options:
     result_format: ResultFormat = ResultFormat.JSON
     result_file: Path | None = None
     override_inputs: list[list[str]] = field(default_factory=list)
-    github_summary: str | None = None
 
     cachix_cache: str | None = None
 
@@ -284,12 +283,6 @@ async def parse_args(args: list[str]) -> Options:
         metavar=("input_path", "flake_url"),
         help="Override a specific flake input (e.g. `dwarffs/nixpkgs`).",
     )
-    parser.add_argument(
-        "--github-summary",
-        type=str,
-        default=None,
-        help="File to write GitHub Actions job summary to (defaults to $GITHUB_STEP_SUMMARY if set)",
-    )
 
     a = parser.parse_args(args)
 
@@ -348,7 +341,6 @@ async def parse_args(args: list[str]) -> Options:
         result_format=ResultFormat[a.result_format.upper()],
         result_file=a.result_file,
         override_inputs=a.override_input,
-        github_summary=a.github_summary,
     )
 
 
@@ -605,39 +597,45 @@ class Build:
     async def build(
         self, stack: AsyncExitStack, build_output: IO[str], opts: Options
     ) -> tuple[int, str]:
-        """Build and return (return_code, stderr_output)."""
-        # Create a temporary file to capture stderr
-        stderr_lines: list[bytes] = []
-
+        """Build and return (return_code, log_output)."""
         proc = await stack.enter_async_context(
             nix_build(self.attr, self.drv_path, build_output, opts)
         )
-
-        # Capture stderr if available
-        if proc.stderr:
-            async def capture_stderr() -> None:
-                assert proc.stderr
-                async for line in proc.stderr:
-                    stderr_lines.append(line)
-
-            # Start capturing stderr in background
-            stderr_task = asyncio.create_task(capture_stderr())
-        else:
-            stderr_task = None
 
         rc = 0
         for _ in range(opts.retries + 1):
             rc = await proc.wait()
             if rc == 0:
                 logger.debug(f"build {self.attr} succeeded")
-                if stderr_task:
-                    await stderr_task
-                return rc, b"".join(stderr_lines).decode("utf-8", errors="replace")
+                return rc, ""
             logger.warning(f"build {self.attr} exited with {rc}")
 
-        if stderr_task:
-            await stderr_task
-        return rc, b"".join(stderr_lines).decode("utf-8", errors="replace")
+        # If build failed, get the log using nix log
+        if rc != 0:
+            log_output = await self.get_build_log(opts)
+            return rc, log_output
+
+        return rc, ""
+
+    async def get_build_log(self, opts: Options) -> str:
+        """Get build log using nix log command."""
+        cmd = maybe_remote(nix_command(["log", self.drv_path]), opts)
+        logger.debug("run %s", shlex.join(cmd))
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode == 0 and stdout:
+                return stdout.decode("utf-8", errors="replace")
+            # If nix log fails, return stderr or empty
+            if stderr:
+                return stderr.decode("utf-8", errors="replace")
+        except OSError as e:
+            logger.debug(f"Failed to get build log: {e}")
+        return ""
 
     async def nix_copy(
         self, args: list[str], exit_stack: AsyncExitStack, opts: Options
@@ -759,10 +757,7 @@ async def nix_build(
 
     args = maybe_remote(args, opts)
     logger.debug("run %s", shlex.join(args))
-    # Always capture stderr to get build logs for GitHub summary
-    proc = await asyncio.create_subprocess_exec(
-        *args, stderr=asyncio.subprocess.PIPE if stderr is None else stderr
-    )
+    proc = await asyncio.create_subprocess_exec(*args, stderr=stderr)
     try:
         yield proc
     finally:
@@ -1007,12 +1002,8 @@ def is_github_actions() -> bool:
     return os.environ.get("GITHUB_ACTIONS") == "true"
 
 
-def get_github_summary_file(opts: Options) -> Path | None:
-    """Get the GitHub summary file path."""
-    # Use explicit argument if provided
-    if opts.github_summary:
-        return Path(opts.github_summary)
-    # Otherwise use GITHUB_STEP_SUMMARY if in GitHub Actions
+def get_github_summary_file() -> Path | None:
+    """Get the GitHub summary file path from environment."""
     if is_github_actions():
         summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary_path:
@@ -1259,7 +1250,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                 dump_junit_xml(f, opts.flake_url, opts.flake_fragment, results)
 
     # Write GitHub Actions summary if configured
-    github_summary_file = get_github_summary_file(opts)
+    github_summary_file = get_github_summary_file()
     if github_summary_file:
         write_github_summary(github_summary_file, opts, results, rc)
 
