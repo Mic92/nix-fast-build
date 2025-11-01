@@ -32,7 +32,7 @@
             packages.nix-fast-build = pkgs.callPackage ./default.nix {
               # we don't want to compile ghc otherwise
               nix-output-monitor =
-                if lib.elem pkgs.hostPlatform.system officialPlatforms then pkgs.nix-output-monitor else null;
+                if lib.elem pkgs.stdenv.hostPlatform.system officialPlatforms then pkgs.nix-output-monitor else null;
             };
             legacyPackages = {
               hello-broken = pkgs.hello.overrideAttrs (_old: {
