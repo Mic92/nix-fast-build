@@ -9,7 +9,7 @@
         # Used to find the project root
         projectRootFile = ".git/config";
 
-        flakeCheck = pkgs.hostPlatform.system != "riscv64-linux";
+        flakeCheck = pkgs.stdenv.hostPlatform.system != "riscv64-linux";
 
         programs.deno.enable = pkgs.lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.deno;
         programs.mypy.enable = true;
