@@ -5,6 +5,7 @@ import pwd
 import xml.etree
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import pytest
 
@@ -85,3 +86,22 @@ def test_remote(sshd: Sshd) -> None:
         ]
     )
     assert rc == 0
+
+
+def test_github_summary_with_env() -> None:
+    with TemporaryDirectory() as d:
+        path = Path(d) / "summary.md"
+        with patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(path)}):
+            rc = cli(["--option", "builders", "", "--github-summary"])
+            assert rc == 0
+            assert path.exists()
+            content = path.read_text()
+            assert "| Target | Result |" in content
+            assert "| --- | --- |" in content
+
+
+def test_github_summary_without_env() -> None:
+    env = {k: v for k, v in os.environ.items() if k != "GITHUB_STEP_SUMMARY"}
+    with patch.dict(os.environ, env, clear=True):
+        rc = cli(["--option", "builders", "", "--github-summary"])
+        assert rc == 1
