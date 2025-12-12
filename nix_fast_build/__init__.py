@@ -87,6 +87,8 @@ class Options:
 
     attic_cache: str | None = None
 
+    github_summary: bool = False
+
     @property
     def remote_url(self) -> None | str:
         if self.remote is None:
@@ -282,6 +284,12 @@ async def parse_args(args: list[str]) -> Options:
         metavar=("input_path", "flake_url"),
         help="Override a specific flake input (e.g. `dwarffs/nixpkgs`).",
     )
+    parser.add_argument(
+        "--github-summary",
+        action="store_true",
+        default=False,
+        help="Write build summary to GITHUB_STEP_SUMMARY file (requires GITHUB_STEP_SUMMARY environment variable)",
+    )
 
     a = parser.parse_args(args)
 
@@ -340,6 +348,7 @@ async def parse_args(args: list[str]) -> Options:
         result_format=ResultFormat[a.result_format.upper()],
         result_file=a.result_file,
         override_inputs=a.override_input,
+        github_summary=a.github_summary,
     )
 
 
@@ -1131,11 +1140,43 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         rc = 1
 
     if opts.result_file:
-        with opts.result_file.open("w") as f:
-            if opts.result_format == ResultFormat.JSON:
-                dump_json(f, results)
-            elif opts.result_format == ResultFormat.JUNIT:
-                dump_junit_xml(f, opts.flake_url, opts.flake_fragment, results)
+
+        def write_result_file() -> None:
+            with opts.result_file.open("w") as f:  # type: ignore[union-attr]
+                if opts.result_format == ResultFormat.JSON:
+                    dump_json(f, results)
+                elif opts.result_format == ResultFormat.JUNIT:
+                    dump_junit_xml(
+                        f,
+                        opts.flake_url,
+                        opts.flake_fragment,
+                        results,  # type: ignore[arg-type]
+                    )
+
+        await asyncio.to_thread(write_result_file)
+
+    if opts.github_summary:
+        github_summary_path_str = os.environ.get("GITHUB_STEP_SUMMARY")
+        if github_summary_path_str is None:
+            logger.error(
+                "--github-summary requires GITHUB_STEP_SUMMARY environment variable to be set"
+            )
+            rc = 1
+        else:
+
+            def write_github_summary() -> None:
+                try:
+                    github_summary_path = Path(github_summary_path_str)  # type: ignore[arg-type]
+                    with github_summary_path.open("w") as f:
+                        dump_github_summary(f, results)
+                except OSError:
+                    logger.exception(
+                        f"Failed to write GitHub summary to {github_summary_path_str}"
+                    )
+                    nonlocal rc
+                    rc = 1
+
+            await asyncio.to_thread(write_github_summary)
 
     return rc
 
@@ -1208,6 +1249,37 @@ def dump_junit_xml(
             failure.text = result.error
 
     ET.ElementTree(testsuites).write(file, encoding="unicode")
+
+
+def dump_github_summary(file: IO[str], results: list[Result]) -> None:
+    """
+    Generates a GitHub Actions summary markdown table.
+
+    Args:
+        file: The file handle to write to.
+        results: A list of Result instances containing build result data.
+    """
+    # Write table header
+    file.write("| Target | Result |\n")
+    file.write("| --- | --- |\n")
+
+    # Group results by attribute and determine overall status
+    attr_status: dict[str, bool] = {}
+    for result in results:
+        # Only track BUILD results for the summary
+        if result.result_type == ResultType.BUILD:
+            attr = result.attr
+            # If any result for this attr failed, mark it as failed
+            if attr not in attr_status:
+                attr_status[attr] = result.success
+            else:
+                attr_status[attr] = attr_status[attr] and result.success
+
+    # Write results sorted by attribute name
+    for attr in sorted(attr_status.keys()):
+        success = attr_status[attr]
+        status_icon = "✅" if success else "❌"
+        file.write(f"| {attr} | {status_icon} |\n")
 
 
 async def async_main(args: list[str]) -> int:
