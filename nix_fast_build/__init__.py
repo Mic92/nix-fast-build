@@ -619,11 +619,8 @@ class Build:
             logger.warning(f"build {self.attr} exited with {rc}")
 
         # If build failed, get the log using nix log
-        if rc != 0:
-            log_output = await self.get_build_log(opts)
-            return BuildResult(return_code=rc, log_output=log_output)
-
-        return BuildResult(return_code=rc, log_output="")
+        log_output = await self.get_build_log(opts)
+        return BuildResult(return_code=rc, log_output=log_output)
 
     async def get_build_log(self, opts: Options) -> str:
         """Get build log using nix log command."""
