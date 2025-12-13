@@ -99,7 +99,10 @@ variables is available:
 - `GITEA_STEP_SUMMARY` (Gitea Actions)
 - `FORGEJO_STEP_SUMMARY` (Forgejo Actions)
 
-No additional configuration is required.
+**Note:** Job summaries are fully supported in GitHub Actions. Gitea and Forgejo
+set the environment variables but do not yet display the summary content in the
+UI (see [gitea#23721](https://github.com/go-gitea/gitea/issues/23721)). The
+summary file is still written, so it will work once support is added upstream.
 
 Example workflow:
 
