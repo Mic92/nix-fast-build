@@ -41,6 +41,22 @@
               hello-broken = pkgs.hello.overrideAttrs (_old: {
                 meta.broken = true;
               });
+              hello-build-fails = pkgs.runCommand "hello-build-fails" { } ''
+                echo "This build will fail"
+                exit 1
+              '';
+              # Test package where a dependency fails
+              hello-dep-fails =
+                let
+                  failing-dep = pkgs.runCommand "failing-dep" { } ''
+                    echo "Dependency build failure"
+                    exit 1
+                  '';
+                in
+                pkgs.runCommand "hello-dep-fails" { buildInputs = [ failing-dep ]; } ''
+                  echo "This should not run because dependency failed"
+                  mkdir -p $out
+                '';
             };
             packages.default = self'.packages.nix-fast-build;
 

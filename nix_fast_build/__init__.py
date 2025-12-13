@@ -110,6 +110,7 @@ class Result:
     success: bool
     duration: float
     error: str | None
+    log_output: str | None = None
 
 
 def _maybe_remote(
@@ -588,6 +589,14 @@ async def run_cachix_daemon_stop(
 
 
 @dataclass
+class BuildResult:
+    """Result of a build operation."""
+
+    return_code: int
+    log_output: str
+
+
+@dataclass
 class Build:
     attr: str
     drv_path: str
@@ -595,18 +604,46 @@ class Build:
 
     async def build(
         self, stack: AsyncExitStack, build_output: IO[str], opts: Options
-    ) -> int:
+    ) -> BuildResult:
+        """Build and return BuildResult."""
         proc = await stack.enter_async_context(
             nix_build(self.attr, self.drv_path, build_output, opts)
         )
+
         rc = 0
         for _ in range(opts.retries + 1):
             rc = await proc.wait()
             if rc == 0:
                 logger.debug(f"build {self.attr} succeeded")
-                return rc
+                return BuildResult(return_code=rc, log_output="")
             logger.warning(f"build {self.attr} exited with {rc}")
-        return rc
+
+        # If build failed, get the log using nix log
+        if rc != 0:
+            log_output = await self.get_build_log(opts)
+            return BuildResult(return_code=rc, log_output=log_output)
+
+        return BuildResult(return_code=rc, log_output="")
+
+    async def get_build_log(self, opts: Options) -> str:
+        """Get build log using nix log command."""
+        cmd = maybe_remote(nix_command(["log", self.drv_path]), opts)
+        logger.debug("run %s", shlex.join(cmd))
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode == 0 and stdout:
+                return stdout.decode("utf-8", errors="replace")
+            # If nix log fails, return stderr or empty
+            if stderr:
+                return stderr.decode("utf-8", errors="replace")
+        except OSError as e:
+            logger.debug(f"Failed to get build log: {e}")
+        return ""
 
     async def nix_copy(
         self, args: list[str], exit_stack: AsyncExitStack, opts: Options
@@ -825,18 +862,22 @@ async def run_builds(
             drv_paths.add(job.drv_path)
             build = Build(job.attr, job.drv_path, job.outputs)
             start_time = timeit.default_timer()
-            rc = await build.build(stack, build_output, opts)
+            build_result = await build.build(stack, build_output, opts)
             results.append(
                 Result(
                     result_type=ResultType.BUILD,
                     attr=job.attr,
-                    success=rc == 0,
+                    success=build_result.return_code == 0,
                     duration=timeit.default_timer() - start_time,
-                    # TODO: add log output here
-                    error=f"build exited with {rc}" if rc != 0 else None,
+                    error=f"build exited with {build_result.return_code}"
+                    if build_result.return_code != 0
+                    else None,
+                    log_output=build_result.log_output
+                    if build_result.return_code != 0
+                    else None,
                 )
             )
-            if rc != 0:
+            if build_result.return_code != 0:
                 continue
             upload_queue.put_nowait(build)
             download_queue.put_nowait(build)
@@ -855,6 +896,9 @@ async def run_uploads(
             if isinstance(build, StopTask):
                 logger.debug("finish upload task")
                 return 0
+            # Skip if copy_to is not configured
+            if not opts.copy_to:
+                continue
             start_time = timeit.default_timer()
             rc = await build.upload(stack, opts)
             results.append(
@@ -880,6 +924,9 @@ async def run_cachix_upload(
             if isinstance(build, StopTask):
                 logger.debug("finish cachix upload task")
                 return 0
+            # Skip if cachix is not configured
+            if cachix_socket_path is None:
+                continue
             start_time = timeit.default_timer()
             rc = await build.upload_cachix(cachix_socket_path, opts)
             results.append(
@@ -903,6 +950,9 @@ async def run_attic_upload(
             if isinstance(build, StopTask):
                 logger.debug("finish attic upload task")
                 return 0
+            # Skip if attic is not configured
+            if opts.attic_cache is None:
+                continue
             start_time = timeit.default_timer()
             rc = await build.upload_attic(opts)
             results.append(
@@ -927,6 +977,9 @@ async def run_downloads(
             if isinstance(build, StopTask):
                 logger.debug("finish download task")
                 return 0
+            # Skip if not using remote or download is disabled
+            if not opts.remote_url or not opts.download:
+                continue
             start_time = timeit.default_timer()
             rc = await build.download(stack, opts)
             results.append(
@@ -965,7 +1018,174 @@ async def report_progress(
 class Summary:
     successes: int = 0
     failures: int = 0
+    success_attrs: list[str] = field(default_factory=list)
     failed_attrs: list[str] = field(default_factory=list)
+
+
+def get_ci_summary_file() -> Path | None:
+    """Get the CI summary file path from environment.
+
+    Supports GitHub Actions, Gitea Actions, and Forgejo Actions.
+    """
+    # Check for step summary environment variables from various CI systems
+    for env_var in [
+        "GITHUB_STEP_SUMMARY",
+        "GITEA_STEP_SUMMARY",
+        "FORGEJO_STEP_SUMMARY",
+    ]:
+        summary_path = os.environ.get(env_var)
+        if summary_path:
+            return Path(summary_path)
+    return None
+
+
+def write_ci_summary(
+    summary_file: Path, _opts: Options, results: list[Result], rc: int
+) -> None:
+    """Write CI job summary in markdown format.
+
+    Supports GitHub Actions, Gitea Actions, and Forgejo Actions.
+    """
+    # Group results by success/failure and type
+    failed_results: dict[ResultType, list[Result]] = defaultdict(list)
+    success_results: dict[ResultType, list[Result]] = defaultdict(list)
+
+    for r in results:
+        if r.success:
+            success_results[r.result_type].append(r)
+        else:
+            failed_results[r.result_type].append(r)
+
+    # Build the markdown content
+    lines = []
+    lines.append("# nix-fast-build Results\n")
+
+    # Overall status with summary counts
+    total_success = sum(len(results) for results in success_results.values())
+    total_failed = sum(len(results) for results in failed_results.values())
+
+    if rc == 0:
+        lines.append(f"## ✅ All Checks Passed ({total_success} successful)\n")
+    else:
+        lines.append(
+            f"## ❌ Build Failed ({total_failed} failed, {total_success} successful)\n"
+        )
+
+    # Show failures first - they're what users need to act on
+    if failed_results:
+        # Failed evaluations
+        if ResultType.EVAL in failed_results:
+            lines.append("\n### Failed Evaluations\n")
+            for result in failed_results[ResultType.EVAL]:
+                lines.append(f"**`{result.attr}`**\n")
+                if result.error:
+                    # Check if error is multi-line (backtrace), if so collapse it
+                    error_lines = result.error.strip().split("\n")
+                    if len(error_lines) > 3:
+                        # Long error message, collapse it
+                        lines.append("<details>")
+                        lines.append("<summary>Error details</summary>\n")
+                        lines.append("```")
+                        lines.extend(error_lines)
+                        lines.append("```")
+                        lines.append("</details>\n")
+                    else:
+                        # Short error, display inline
+                        lines.append(f"Error: {result.error}\n")
+
+        # Failed builds with detailed logs
+        if ResultType.BUILD in failed_results:
+            lines.append("\n### Failed Builds\n")
+            for result in failed_results[ResultType.BUILD]:
+                lines.append(
+                    f"\n**{result.attr}** (duration: {result.duration:.2f}s)\n"
+                )
+                if result.log_output:
+                    # Truncate very long logs (keep last 100 lines)
+                    log_lines = result.log_output.strip().split("\n")
+                    if len(log_lines) > 100:
+                        log_lines = [
+                            "... (truncated, showing last 100 lines) ...",
+                            *log_lines[-100:],
+                        ]
+                    lines.append("\n<details>")
+                    lines.append(
+                        f"<summary>Build Log ({len(log_lines)} lines)</summary>\n"
+                    )
+                    lines.append("```")
+                    lines.extend(log_lines)
+                    lines.append("```")
+                    lines.append("</details>\n")
+                elif result.error:
+                    # If no log available, show error message
+                    lines.append(f"Error: {result.error}\n")
+
+        # Other failed operations (uploads, downloads, etc.)
+        for result_type in [
+            ResultType.UPLOAD,
+            ResultType.DOWNLOAD,
+            ResultType.CACHIX,
+            ResultType.ATTIC,
+        ]:
+            if result_type in failed_results:
+                type_name = result_type.name.title()
+                lines.append(f"\n### Failed {type_name}s\n")
+                for result in failed_results[result_type]:
+                    lines.append(f"**`{result.attr}`**\n")
+                    if result.error:
+                        lines.append(f"Error: {result.error}\n")
+
+    # Show successful operations - collapsed by default for cleaner view
+    if success_results:
+        lines.append("\n## Successful Operations\n")
+
+        # Successful builds
+        if ResultType.BUILD in success_results:
+            build_count = len(success_results[ResultType.BUILD])
+            lines.append("\n<details>")
+            lines.append(f"<summary>Built {build_count} packages</summary>\n")
+            lines.extend(
+                [
+                    f"- {result.attr} ({result.duration:.2f}s)"
+                    for result in success_results[ResultType.BUILD]
+                ]
+            )
+            lines.append("</details>\n")
+
+        # Successful evaluations
+        if ResultType.EVAL in success_results:
+            eval_count = len(success_results[ResultType.EVAL])
+            lines.append("\n<details>")
+            lines.append(f"<summary>Evaluated {eval_count} attributes</summary>\n")
+            lines.extend(
+                [f"- {result.attr}" for result in success_results[ResultType.EVAL]]
+            )
+            lines.append("</details>\n")
+
+        # Other successful operations
+        for result_type in [
+            ResultType.UPLOAD,
+            ResultType.DOWNLOAD,
+            ResultType.CACHIX,
+            ResultType.ATTIC,
+        ]:
+            if result_type in success_results:
+                count = len(success_results[result_type])
+                type_name = result_type.name.title()
+                lines.append("\n<details>")
+                lines.append(f"<summary>{type_name}: {count} successful</summary>\n")
+                lines.extend(
+                    [f"- {result.attr}" for result in success_results[result_type]]
+                )
+                lines.append("</details>\n")
+
+    # Write to file
+    try:
+        with summary_file.open("a") as f:
+            f.write("\n".join(lines))
+        logger.info(f"CI summary written to {summary_file}")
+    except OSError as e:
+        logger.warning(f"Failed to write CI summary to {summary_file}: {e}")
 
 
 async def run(stack: AsyncExitStack, opts: Options) -> int:
@@ -1100,7 +1320,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             assert task.done(), f"Task {task.get_name()} is not done"
 
     rc = 0
-    stats_by_type = defaultdict(Summary)
+    stats_by_type: dict[ResultType, Summary] = defaultdict(Summary)
     for r in results:
         stats = stats_by_type[r.result_type]
         stats.successes += 1 if r.success else 0
@@ -1136,6 +1356,11 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                 dump_json(f, results)
             elif opts.result_format == ResultFormat.JUNIT:
                 dump_junit_xml(f, opts.flake_url, opts.flake_fragment, results)
+
+    # Write CI summary if configured (GitHub Actions, Gitea Actions, or Forgejo Actions)
+    ci_summary_file = get_ci_summary_file()
+    if ci_summary_file:
+        write_ci_summary(ci_summary_file, opts, results, rc)
 
     return rc
 
