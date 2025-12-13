@@ -1018,7 +1018,6 @@ async def report_progress(
 class Summary:
     successes: int = 0
     failures: int = 0
-    success_attrs: list[str] = field(default_factory=list)
     failed_attrs: list[str] = field(default_factory=list)
 
 
