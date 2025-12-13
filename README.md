@@ -1,4 +1,4 @@
-# nix-fast-build 🚀 (previously known as nix-ci-build)
+# nix-fast-build 🚀
 
 Combine the power of `nix-eval-jobs` with `nix-output-monitor` to speed-up your
 evaluation and building process. `nix-fast-build` an also integrates with remote
@@ -81,21 +81,27 @@ To make output more concise for CI environments, use the `--no-nom` flag. This
 replaces `nom` with a streamlined status reporter, which updates only when
 there's a change in the number of pending builds, uploads, or downloads.
 
-## GitHub Actions Job Summaries
+## CI Job Summaries
 
-When running in GitHub Actions, nix-fast-build automatically generates job
-summaries that appear directly in the Actions UI. The summary includes:
+When running in GitHub Actions, Gitea Actions, or Forgejo Actions,
+nix-fast-build automatically generates job summaries that appear directly in the
+CI UI. The summary includes:
 
-- Overall build status (✅ Success / ❌ Failed)
-- Summary table with success/failure counts by operation type (EVAL, BUILD,
-  UPLOAD, etc.)
+- Overall build status with success/failure counts
 - Detailed sections for each failed build with build logs
+- Collapsible sections showing successful operations (builds, evaluations,
+  uploads, etc.)
 
-This feature is automatically enabled when the `GITHUB_ACTIONS` environment
-variable is set to `true` and `GITHUB_STEP_SUMMARY` is available. No additional
-configuration is required.
+This feature is automatically enabled when one of the following environment
+variables is available:
 
-Example GitHub Actions workflow:
+- `GITHUB_STEP_SUMMARY` (GitHub Actions)
+- `GITEA_STEP_SUMMARY` (Gitea Actions)
+- `FORGEJO_STEP_SUMMARY` (Forgejo Actions)
+
+No additional configuration is required.
+
+Example workflow:
 
 ```yaml
 - name: Build with nix-fast-build
