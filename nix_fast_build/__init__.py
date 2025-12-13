@@ -1035,6 +1035,128 @@ def get_ci_summary_file() -> Path | None:
     return None
 
 
+def format_failed_results(failed_results: dict[ResultType, list[Result]]) -> list[str]:
+    """Format failed results section of CI summary."""
+    lines = []
+
+    if not failed_results:
+        return lines
+
+    # Failed evaluations
+    if ResultType.EVAL in failed_results:
+        lines.append("\n### Failed Evaluations\n")
+        for result in failed_results[ResultType.EVAL]:
+            lines.append(f"**`{result.attr}`**\n")
+            if result.error:
+                # Check if error is multi-line (backtrace), if so collapse it
+                error_lines = result.error.strip().split("\n")
+                if len(error_lines) > 3:
+                    # Long error message, collapse it
+                    lines.append("<details>")
+                    lines.append("<summary>Error details</summary>\n")
+                    lines.append("```")
+                    lines.extend(error_lines)
+                    lines.append("```")
+                    lines.append("</details>\n")
+                else:
+                    # Short error, display inline
+                    lines.append(f"Error: {result.error}\n")
+
+    # Failed builds with detailed logs
+    if ResultType.BUILD in failed_results:
+        lines.append("\n### Failed Builds\n")
+        for result in failed_results[ResultType.BUILD]:
+            lines.append(f"\n**{result.attr}** (duration: {result.duration:.2f}s)\n")
+            if result.log_output:
+                # Truncate very long logs (keep last 100 lines)
+                log_lines = result.log_output.strip().split("\n")
+                if len(log_lines) > 100:
+                    log_lines = [
+                        "... (truncated, showing last 100 lines) ...",
+                        *log_lines[-100:],
+                    ]
+                lines.append("\n<details>")
+                lines.append(f"<summary>Build Log ({len(log_lines)} lines)</summary>\n")
+                lines.append("```")
+                lines.extend(log_lines)
+                lines.append("```")
+                lines.append("</details>\n")
+            elif result.error:
+                # If no log available, show error message
+                lines.append(f"Error: {result.error}\n")
+
+    # Other failed operations (uploads, downloads, etc.)
+    for result_type in [
+        ResultType.UPLOAD,
+        ResultType.DOWNLOAD,
+        ResultType.CACHIX,
+        ResultType.ATTIC,
+    ]:
+        if result_type in failed_results:
+            type_name = result_type.name.title()
+            lines.append(f"\n### Failed {type_name}s\n")
+            for result in failed_results[result_type]:
+                lines.append(f"**`{result.attr}`**\n")
+                if result.error:
+                    lines.append(f"Error: {result.error}\n")
+
+    return lines
+
+
+def format_successful_results(
+    success_results: dict[ResultType, list[Result]],
+) -> list[str]:
+    """Format successful results section of CI summary."""
+    lines = []
+
+    if not success_results:
+        return lines
+
+    lines.append("\n## Successful Operations\n")
+
+    # Successful builds
+    if ResultType.BUILD in success_results:
+        build_count = len(success_results[ResultType.BUILD])
+        lines.append("\n<details>")
+        lines.append(f"<summary>Built {build_count} packages</summary>\n")
+        lines.extend(
+            [
+                f"- {result.attr} ({result.duration:.2f}s)"
+                for result in success_results[ResultType.BUILD]
+            ]
+        )
+        lines.append("</details>\n")
+
+    # Successful evaluations
+    if ResultType.EVAL in success_results:
+        eval_count = len(success_results[ResultType.EVAL])
+        lines.append("\n<details>")
+        lines.append(f"<summary>Evaluated {eval_count} attributes</summary>\n")
+        lines.extend(
+            [f"- {result.attr}" for result in success_results[ResultType.EVAL]]
+        )
+        lines.append("</details>\n")
+
+    # Other successful operations
+    for result_type in [
+        ResultType.UPLOAD,
+        ResultType.DOWNLOAD,
+        ResultType.CACHIX,
+        ResultType.ATTIC,
+    ]:
+        if result_type in success_results:
+            count = len(success_results[result_type])
+            type_name = result_type.name.title()
+            lines.append("\n<details>")
+            lines.append(f"<summary>{type_name}: {count} successful</summary>\n")
+            lines.extend(
+                [f"- {result.attr}" for result in success_results[result_type]]
+            )
+            lines.append("</details>\n")
+
+    return lines
+
+
 def write_ci_summary(
     summary_file: Path, _opts: Options, results: list[Result], rc: int
 ) -> None:
@@ -1068,112 +1190,10 @@ def write_ci_summary(
         )
 
     # Show failures first - they're what users need to act on
-    if failed_results:
-        # Failed evaluations
-        if ResultType.EVAL in failed_results:
-            lines.append("\n### Failed Evaluations\n")
-            for result in failed_results[ResultType.EVAL]:
-                lines.append(f"**`{result.attr}`**\n")
-                if result.error:
-                    # Check if error is multi-line (backtrace), if so collapse it
-                    error_lines = result.error.strip().split("\n")
-                    if len(error_lines) > 3:
-                        # Long error message, collapse it
-                        lines.append("<details>")
-                        lines.append("<summary>Error details</summary>\n")
-                        lines.append("```")
-                        lines.extend(error_lines)
-                        lines.append("```")
-                        lines.append("</details>\n")
-                    else:
-                        # Short error, display inline
-                        lines.append(f"Error: {result.error}\n")
-
-        # Failed builds with detailed logs
-        if ResultType.BUILD in failed_results:
-            lines.append("\n### Failed Builds\n")
-            for result in failed_results[ResultType.BUILD]:
-                lines.append(
-                    f"\n**{result.attr}** (duration: {result.duration:.2f}s)\n"
-                )
-                if result.log_output:
-                    # Truncate very long logs (keep last 100 lines)
-                    log_lines = result.log_output.strip().split("\n")
-                    if len(log_lines) > 100:
-                        log_lines = [
-                            "... (truncated, showing last 100 lines) ...",
-                            *log_lines[-100:],
-                        ]
-                    lines.append("\n<details>")
-                    lines.append(
-                        f"<summary>Build Log ({len(log_lines)} lines)</summary>\n"
-                    )
-                    lines.append("```")
-                    lines.extend(log_lines)
-                    lines.append("```")
-                    lines.append("</details>\n")
-                elif result.error:
-                    # If no log available, show error message
-                    lines.append(f"Error: {result.error}\n")
-
-        # Other failed operations (uploads, downloads, etc.)
-        for result_type in [
-            ResultType.UPLOAD,
-            ResultType.DOWNLOAD,
-            ResultType.CACHIX,
-            ResultType.ATTIC,
-        ]:
-            if result_type in failed_results:
-                type_name = result_type.name.title()
-                lines.append(f"\n### Failed {type_name}s\n")
-                for result in failed_results[result_type]:
-                    lines.append(f"**`{result.attr}`**\n")
-                    if result.error:
-                        lines.append(f"Error: {result.error}\n")
+    lines.extend(format_failed_results(failed_results))
 
     # Show successful operations - collapsed by default for cleaner view
-    if success_results:
-        lines.append("\n## Successful Operations\n")
-
-        # Successful builds
-        if ResultType.BUILD in success_results:
-            build_count = len(success_results[ResultType.BUILD])
-            lines.append("\n<details>")
-            lines.append(f"<summary>Built {build_count} packages</summary>\n")
-            lines.extend(
-                [
-                    f"- {result.attr} ({result.duration:.2f}s)"
-                    for result in success_results[ResultType.BUILD]
-                ]
-            )
-            lines.append("</details>\n")
-
-        # Successful evaluations
-        if ResultType.EVAL in success_results:
-            eval_count = len(success_results[ResultType.EVAL])
-            lines.append("\n<details>")
-            lines.append(f"<summary>Evaluated {eval_count} attributes</summary>\n")
-            lines.extend(
-                [f"- {result.attr}" for result in success_results[ResultType.EVAL]]
-            )
-            lines.append("</details>\n")
-
-        # Other successful operations
-        for result_type in [
-            ResultType.UPLOAD,
-            ResultType.DOWNLOAD,
-            ResultType.CACHIX,
-            ResultType.ATTIC,
-        ]:
-            if result_type in success_results:
-                count = len(success_results[result_type])
-                type_name = result_type.name.title()
-                lines.append("\n<details>")
-                lines.append(f"<summary>{type_name}: {count} successful</summary>\n")
-                lines.extend(
-                    [f"- {result.attr}" for result in success_results[result_type]]
-                )
-                lines.append("</details>\n")
+    lines.extend(format_successful_results(success_results))
 
     # Write to file
     try:
