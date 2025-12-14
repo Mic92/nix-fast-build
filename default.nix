@@ -1,5 +1,5 @@
 {
-  python311,
+  python3Packages,
   makeWrapper,
   nix-eval-jobs,
   nix-output-monitor,
@@ -13,18 +13,18 @@ let
     nix-output-monitor
   ];
 in
-python311.pkgs.buildPythonApplication {
+python3Packages.buildPythonApplication {
   pname = "nix-fast-build";
   version = "1.3.0";
   format = "pyproject";
   src = ./.;
-  buildInputs = with python311.pkgs; [
+  buildInputs = with python3Packages; [
     setuptools
     bashInteractive
   ];
   nativeBuildInputs = [
     makeWrapper
-    python311.pkgs.pytest
+    python3Packages.pytest
   ];
   preFixup = ''
     makeWrapperArgs+=(--prefix PATH : ${path})
