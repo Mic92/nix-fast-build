@@ -186,6 +186,21 @@ Authentication is not propagated to ssh when using the `--remote` flag, instead
 the user is expected that attic credentials are configured on the remote
 machine.
 
+## Niks3 support
+
+nix-fast-build can upload to a [niks3](https://github.com/Mic92/niks3) server
+like this:
+
+```console
+$ nix-fast-build --niks3-server https://niks3.example.com
+```
+
+niks3 reads authentication from `~/.config/niks3/auth-token` by default, or from
+a custom path via the `NIKS3_AUTH_TOKEN_FILE` environment variable.
+
+When using the `--remote` flag, ensure that the auth token file exists on the
+remote machine (either at the default XDG path or via `NIKS3_AUTH_TOKEN_FILE`).
+
 ## Machine-readable builds results
 
 nix-fast-build supports both its own json format and junit:
@@ -222,8 +237,9 @@ nix-shell -p python3Packages.junit2html --run 'junit2html result.xml result.html
 ```console
 usage: nix-fast-build [-h] [-f FLAKE] [-j MAX_JOBS] [--option name value]
                       [--remote-ssh-option name value]
-                      [--cachix-cache CACHIX_CACHE] 
-                      [--attic-cache ATTIC_CACHE] [--no-nom]
+                      [--cachix-cache CACHIX_CACHE]
+                      [--attic-cache ATTIC_CACHE]
+                      [--niks3-server NIKS3_SERVER] [--no-nom]
                       [--systems SYSTEMS] [--retries RETRIES] [--no-link]
                       [--out-link OUT_LINK] [--remote REMOTE]
                       [--always-upload-source] [--no-download] [--skip-cached]
@@ -247,6 +263,9 @@ options:
                         Cachix cache to upload to
   --attic-cache ATTIC_CACHE
                         Attic cache to upload to
+  --niks3-server NIKS3_SERVER
+                        Niks3 server URL to upload to (auth from
+                        ~/.config/niks3/auth-token or NIKS3_AUTH_TOKEN_FILE)
   --no-nom              Don't use nix-output-monitor to print build output
                         (default: false)
   --systems SYSTEMS     Space-separated list of systems to build for (default:
