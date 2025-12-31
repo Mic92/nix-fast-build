@@ -53,6 +53,11 @@ def test_build_json() -> None:
         rc = cli(["--option", "builders", "", "--result-file", str(path)])
         data = json.loads(path.read_text())
         assert len(data["results"]) > 0
+        build_results = [r for r in data["results"] if r["type"] == "BUILD"]
+        assert build_results
+        for result in build_results:
+            assert "outputs" in result
+            assert result["outputs"]
         assert rc == 0
 
 
