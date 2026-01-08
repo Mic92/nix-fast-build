@@ -114,6 +114,7 @@ class Result:
     duration: float
     error: str | None
     log_output: str | None = None
+    outputs: dict[str, str] | None = None
 
 
 def _maybe_remote(
@@ -887,6 +888,7 @@ async def run_builds(
                     log_output=build_result.log_output
                     if build_result.return_code != 0
                     else None,
+                    outputs=job.outputs or None,
                 )
             )
             if build_result.return_code != 0:
@@ -1487,6 +1489,7 @@ def dump_json(file: IO[str], results: list[Result]) -> None:
                     "success": r.success,
                     "duration": r.duration,
                     "error": r.error,
+                    **({"outputs": r.outputs} if r.outputs is not None else {}),
                 }
                 for r in results
             ]
