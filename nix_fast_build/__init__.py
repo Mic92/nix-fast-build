@@ -534,7 +534,9 @@ async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
 
 @asynccontextmanager
 async def nix_output_monitor(pipe: Pipe, opts: Options) -> AsyncIterator[Process]:
-    cmd = maybe_remote([*nix_shell("nixpkgs#nix-output-monitor", "nom")], opts)
+    cmd = maybe_remote(
+        [*nix_shell("nixpkgs#nix-output-monitor", "nom"), "--json"], opts
+    )
     proc = await asyncio.create_subprocess_exec(*cmd, stdin=pipe.read_file)
     try:
         yield proc
@@ -770,7 +772,15 @@ class QueueWithContext(Queue[T]):
 async def nix_build(
     attr: str, installable: str, stderr: IO[Any] | None, opts: Options
 ) -> AsyncIterator[Process]:
-    args = ["nix-build", installable, "--keep-going", *opts.options]
+    args = [
+        "nix-build",
+        installable,
+        "--keep-going",
+        "--log-format",
+        "internal-json",
+        "-v",
+        *opts.options,
+    ]
     if opts.no_link:
         args += ["--no-link"]
     else:
