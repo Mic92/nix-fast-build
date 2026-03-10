@@ -957,7 +957,9 @@ async def nix_build(
     opts: Options,
     nom_pipe: IO[bytes] | None = None,
 ) -> AsyncIterator[Process]:
-    args = [*opts.nix_build_bin, installable, "--keep-going", *opts.options]
+    args = opts.nix_command(
+        ["build", f"{installable}^*", "--keep-going", *opts.options]
+    )
     if nom_pipe is not None:
         args += ["--log-format", "internal-json", "-v"]
     if opts.no_link:
