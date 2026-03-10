@@ -914,7 +914,7 @@ class QueueWithContext(Queue[T]):
 async def nix_build(
     attr: str, installable: str, stderr: IO[Any] | None, opts: Options
 ) -> AsyncIterator[Process]:
-    args = ["nix-build", installable, "--keep-going", *opts.options]
+    args = nix_command(["build", f"{installable}^*", "--keep-going", *opts.options])
     if opts.no_link:
         args += ["--no-link"]
     else:
