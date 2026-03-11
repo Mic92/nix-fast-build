@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import TracebackType
-from typing import IO, Any, TypeVar
+from typing import IO, Any, Self, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class Pipe:
         self.read_file = os.fdopen(fds[0], "rb")
         self.write_file = os.fdopen(fds[1], "wb")
 
-    def __enter__(self) -> "Pipe":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(
@@ -59,10 +59,20 @@ class ResultFormat(enum.Enum):
     JUNIT = enum.auto()
 
 
+class EvalMode(enum.Enum):
+    FLAKE = enum.auto()
+    EXPR = enum.auto()
+
+
 @dataclass
 class Options:
+    eval_mode: EvalMode = EvalMode.FLAKE
     flake_url: str = ""
     flake_fragment: str = ""
+    expr_file: str = ""
+    expr_attr: str = ""
+    expr_args: list[str] = field(default_factory=list)
+    impure: bool = False
     options: list[str] = field(default_factory=list)
     remote: str | None = None
     remote_ssh_options: list[str] = field(default_factory=list)
@@ -94,6 +104,16 @@ class Options:
         if self.remote is None:
             return None
         return f"ssh://{self.remote}"
+
+    @property
+    def display_name(self) -> str:
+        """Human-readable name for the evaluation target, used in reports."""
+        if self.eval_mode == EvalMode.FLAKE:
+            return f"{self.flake_url}#{self.flake_fragment}"
+        name = self.expr_file
+        if self.expr_attr:
+            name += f".{self.expr_attr}"
+        return name
 
 
 class ResultType(enum.Enum):
@@ -158,12 +178,65 @@ async def get_nix_config(
 async def parse_args(args: list[str]) -> Options:
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
+    # Evaluation mode: --flake (default) or --file (non-flake)
+    eval_group = parser.add_mutually_exclusive_group()
+    eval_group.add_argument(
         "-f",
         "--flake",
-        default=".#checks",
+        default=None,
         help="Flake url to evaluate/build (default: .#checks)",
     )
+    eval_group.add_argument(
+        "--file",
+        nargs="?",
+        const="default.nix",
+        default=None,
+        help="Nix expression file to evaluate (default: default.nix). Mutually exclusive with --flake.",
+    )
+
+    # Non-flake specific options
+    parser.add_argument(
+        "-A",
+        "--attr",
+        default="",
+        help="Attribute path to evaluate in non-flake mode (like nix-build -A)",
+    )
+    parser.add_argument(
+        "--arg",
+        action="append",
+        nargs=2,
+        metavar=("name", "value"),
+        default=[],
+        help="Pass the value expr as the argument name to Nix functions (non-flake mode)",
+    )
+    parser.add_argument(
+        "--argstr",
+        action="append",
+        nargs=2,
+        metavar=("name", "value"),
+        default=[],
+        help="Pass the string as the argument name to Nix functions (non-flake mode)",
+    )
+    parser.add_argument(
+        "-I",
+        "--include",
+        action="append",
+        default=[],
+        help="Add path to the Nix search path (non-flake mode)",
+    )
+    parser.add_argument(
+        "--impure",
+        action="store_true",
+        default=False,
+        help="Allow impure expressions (default in --file mode)",
+    )
+    parser.add_argument(
+        "--pure",
+        action="store_true",
+        default=False,
+        help="Enforce pure evaluation in --file mode (overrides the default impure behavior)",
+    )
+
     parser.add_argument(
         "-j",
         "--max-jobs",
@@ -295,11 +368,62 @@ async def parse_args(args: list[str]) -> Options:
 
     a = parser.parse_args(args)
 
-    flake_parts = a.flake.split("#")
-    flake_url = flake_parts[0]
+    # Determine evaluation mode
+    eval_mode = EvalMode.EXPR if a.file is not None else EvalMode.FLAKE
+
+    # Validate: --remote is not supported in non-flake mode
+    if eval_mode == EvalMode.EXPR and a.remote:
+        parser.error("--remote is not supported in non-flake (--file) mode")
+
+    # Validate: --override-input only makes sense for flakes
+    if eval_mode == EvalMode.EXPR and a.override_input:
+        parser.error("--override-input is not supported in non-flake (--file) mode")
+
+    # Validate: --always-upload-source only makes sense for flakes
+    if eval_mode == EvalMode.EXPR and a.always_upload_source:
+        parser.error(
+            "--always-upload-source is not supported in non-flake (--file) mode"
+        )
+
+    # Validate: non-flake-specific flags should not be used with --flake
+    if eval_mode == EvalMode.FLAKE:
+        if a.attr:
+            parser.error("-A/--attr is only supported in non-flake (--file) mode")
+        if a.arg:
+            parser.error("--arg is only supported in non-flake (--file) mode")
+        if a.argstr:
+            parser.error("--argstr is only supported in non-flake (--file) mode")
+        if a.include:
+            parser.error("-I/--include is only supported in non-flake (--file) mode")
+        if a.pure:
+            parser.error("--pure is only supported in non-flake (--file) mode")
+
+    # In --file mode, default to impure unless --pure is explicitly given
+    impure = not a.pure if eval_mode == EvalMode.EXPR else a.impure
+
+    # Parse flake mode settings
+    flake_url = ""
     flake_fragment = ""
-    if len(flake_parts) == 2:
-        flake_fragment = flake_parts[1]
+    if eval_mode == EvalMode.FLAKE:
+        flake_spec = a.flake if a.flake is not None else ".#checks"
+        flake_parts = flake_spec.split("#")
+        flake_url = flake_parts[0]
+        if len(flake_parts) == 2:
+            flake_fragment = flake_parts[1]
+
+    # Parse expr mode settings
+    expr_file = ""
+    expr_attr = ""
+    expr_args: list[str] = []
+    if eval_mode == EvalMode.EXPR:
+        expr_file = a.file
+        expr_attr = a.attr
+        for name, value in a.arg:
+            expr_args.extend(["--arg", name, value])
+        for name, value in a.argstr:
+            expr_args.extend(["--argstr", name, value])
+        for path in a.include:
+            expr_args.extend(["--include", path])
 
     options = []
     for name, value in a.option:
@@ -328,8 +452,13 @@ async def parse_args(args: list[str]) -> Options:
         systems = set(a.systems.split(" "))
 
     return Options(
+        eval_mode=eval_mode,
         flake_url=flake_url,
         flake_fragment=flake_fragment,
+        expr_file=expr_file,
+        expr_attr=expr_attr,
+        expr_args=expr_args,
+        impure=impure,
         always_upload_source=a.always_upload_source,
         remote=a.remote,
         skip_cached=a.skip_cached,
@@ -505,15 +634,30 @@ async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
         str(opts.eval_max_memory_size),
         "--workers",
         str(opts.eval_workers),
-        "--flake",
-        f"{opts.flake_url}#{opts.flake_fragment}",
         *opts.options,
     ]
-    if opts.override_inputs:
-        for override in opts.override_inputs:
-            args.append("--override-input")
-            args.append(override[0])
-            args.append(override[1])
+    if opts.impure:
+        args.append("--impure")
+    if opts.eval_mode == EvalMode.FLAKE:
+        args.extend(
+            [
+                "--flake",
+                f"{opts.flake_url}#{opts.flake_fragment}",
+            ]
+        )
+        if opts.override_inputs:
+            for override in opts.override_inputs:
+                args.append("--override-input")
+                args.append(override[0])
+                args.append(override[1])
+    else:
+        # Non-flake mode: pass expression file as positional arg
+        args.extend(opts.expr_args)
+        if opts.expr_attr:
+            # Use --select to navigate to the desired attribute path,
+            # similar to nix-build -A but using nix-eval-jobs' native API
+            args.extend(["--select", f"root: root.{opts.expr_attr}"])
+        args.append(opts.expr_file)
     if opts.skip_cached:
         args.append("--check-cache-status")
     if opts.remote:
@@ -816,7 +960,7 @@ async def run_evaluation(
             msg = f"Failed to parse line of nix-eval-jobs output: {line.decode()}"
             raise Error(msg) from e
         error = job.get("error")
-        attr = job.get("attr", "unknown-flake-attribute")
+        attr = job.get("attr", "unknown-attribute")
         result.append(
             Result(
                 result_type=ResultType.EVAL,
@@ -1444,10 +1588,16 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         logger.error(
             f"{result_type.name}: {summary.successes} successes, {summary.failures} failures"
         )
-        failed_attrs = [
-            f"{opts.flake_url}#{opts.flake_fragment}.{attr}"
-            for attr in summary.failed_attrs
-        ]
+        if opts.eval_mode == EvalMode.FLAKE:
+            failed_attrs = [
+                f"{opts.flake_url}#{opts.flake_fragment}.{attr}"
+                for attr in summary.failed_attrs
+            ]
+        else:
+            failed_attrs = [
+                f"{opts.expr_file}.{attr}" if opts.expr_attr else attr
+                for attr in summary.failed_attrs
+            ]
         logger.error(f"Failed attributes: {' '.join(failed_attrs)}")
     if eval_rc != 0:
         logger.error(f"nix-eval-jobs exited with {eval_proc.returncode}")
@@ -1465,7 +1615,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             if opts.result_format == ResultFormat.JSON:
                 dump_json(f, results)
             elif opts.result_format == ResultFormat.JUNIT:
-                dump_junit_xml(f, opts.flake_url, opts.flake_fragment, results)
+                dump_junit_xml(f, opts.display_name, results)
 
     # Write CI summary if configured (GitHub Actions, Gitea Actions, or Forgejo Actions)
     ci_summary_file = get_ci_summary_file()
@@ -1500,22 +1650,21 @@ def dump_json(file: IO[str], results: list[Result]) -> None:
     )
 
 
-def dump_junit_xml(
-    file: IO[str], flake_url: str, flake_fragment: str, build_results: list[Result]
-) -> None:
+def dump_junit_xml(file: IO[str], suite_name: str, build_results: list[Result]) -> None:
     """
     Generates a JUnit XML report based on the results of Nix builds.
 
     Args:
-        build_results (List[BuildResult]): A list of BuildResult instances containing build result data.
-        output_file (str): The name of the output file where the XML report will be written.
+        suite_name: Human-readable name for the test suite.
+        build_results: A list of Result instances containing build result data.
+        file: The output file where the XML report will be written.
     """
     testsuites = ET.Element("testsuites")
     testsuite = ET.SubElement(
         testsuites,
         "testsuite",
         {
-            "name": f"{flake_url}#{flake_fragment}",
+            "name": suite_name,
             "tests": str(len(build_results)),
             "failures": str(sum(1 for r in build_results if not r.success)),
         },
@@ -1556,7 +1705,7 @@ async def async_main(args: list[str]) -> int:
     stack = AsyncExitStack()
     # using async wait here seems to make the return value skipped in the non-execptional case
     try:
-        if opts.remote_url:
+        if opts.remote_url and opts.eval_mode == EvalMode.FLAKE:
             opts.flake_url = upload_sources(opts)
         return await run(stack, opts)
     finally:

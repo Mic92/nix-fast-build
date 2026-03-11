@@ -1,9 +1,10 @@
 # nix-fast-build 🚀
 
 Combine the power of `nix-eval-jobs` with `nix-output-monitor` to speed-up your
-evaluation and building process. `nix-fast-build` an also integrates with remote
-machines by uploading the current flake, performing the evaluation/build
-remotely, and then transferring the resultant store paths back to you.
+evaluation and building process. `nix-fast-build` works with both flakes and
+plain Nix expressions, and can integrate with remote machines by uploading the
+current flake, performing the evaluation/build remotely, and then transferring
+the resultant store paths back to you.
 
 ## Why `nix-fast-build`?
 
@@ -49,6 +50,38 @@ attributes in `.#checks.$currentSystem`.
 ---
 
 Enjoy faster and more efficient NixOS builds with `nix-fast-build`!
+
+## Building non-flake Nix expressions
+
+`nix-fast-build` also works with plain Nix expressions (no flake required) via
+the `--file` flag:
+
+```console
+$ nix-fast-build --file ./release.nix
+```
+
+If `--file` is passed without a file argument, it defaults to `default.nix`.
+
+Use `-A` to select a specific attribute, just like `nix-build -A`:
+
+```console
+$ nix-fast-build --file ./release.nix -A mypackage
+```
+
+You can pass arguments to the Nix expression with `--arg` and `--argstr`, and
+extend the Nix search path with `-I`:
+
+```console
+$ nix-fast-build --file ./release.nix --argstr system x86_64-linux
+$ nix-fast-build --file ./ci.nix -I nixpkgs=flake:nixpkgs
+```
+
+Evaluation in `--file` mode is impure by default (allowing `builtins.getFlake`,
+`<nixpkgs>`, etc.). Use `--pure` to enforce strict pure evaluation.
+
+**Note:** Remote building (`--remote`) is not supported in `--file` mode, since
+there is no flake archive mechanism to upload arbitrary Nix expressions to a
+remote machine.
 
 ## Remote building
 
@@ -156,7 +189,7 @@ By default nix-fast-build will evaluate all systems in `.#checks`, you can limit
 it to the current system by using this command:
 
 ```console
-$ nix run github:Mic92/nix-fast-build -- --skip-cached --no-nom --flake ".#checks.$(nix eval --raw --impure --expr builtins.currentSystem)"
+$ nix run github:Mic92/nix-fast-build -- --skip-cached --no-nom --flake ".#checks.$(nix eval --raw --impure --file builtins.currentSystem)"
 ```
 
 ## Cachix support
@@ -235,7 +268,9 @@ nix-shell -p python3Packages.junit2html --run 'junit2html result.xml result.html
 ## Reference
 
 ```console
-usage: nix-fast-build [-h] [-f FLAKE] [-j MAX_JOBS] [--option name value]
+usage: nix-fast-build [-h] [-f FLAKE | --file [EXPR]] [-A ATTR]
+                      [--arg name value] [--argstr name value] [-I INCLUDE]
+                      [--impure] [--pure] [-j MAX_JOBS] [--option name value]
                       [--remote-ssh-option name value]
                       [--cachix-cache CACHIX_CACHE]
                       [--attic-cache ATTIC_CACHE]
@@ -248,12 +283,25 @@ usage: nix-fast-build [-h] [-f FLAKE] [-j MAX_JOBS] [--option name value]
                       [--eval-workers EVAL_WORKERS]
                       [--result-file RESULT_FILE]
                       [--result-format {json,junit}]
+                      [--override-input input_path flake_url]
 
 options:
   -h, --help            show this help message and exit
-  -f FLAKE, --flake FLAKE
-                        Flake url to evaluate/build (default: .#checks
-  -j MAX_JOBS, --max-jobs MAX_JOBS
+  -f, --flake FLAKE     Flake url to evaluate/build (default: .#checks)
+  --file [EXPR]         Nix expression file to evaluate (default:
+                        default.nix). Mutually exclusive with --flake.
+  -A, --attr ATTR       Attribute path to evaluate in non-flake mode (like
+                        nix-build -A)
+  --arg name value      Pass the value expr as the argument name to Nix
+                        functions (non-flake mode)
+  --argstr name value   Pass the string as the argument name to Nix functions
+                        (non-flake mode)
+  -I, --include INCLUDE
+                        Add path to the Nix search path (non-flake mode)
+  --impure              Allow impure expressions (default in --file mode)
+  --pure                Enforce pure evaluation in --file mode (overrides the
+                        default impure behavior)
+  -j, --max-jobs MAX_JOBS
                         Maximum number of build jobs to run in parallel (0 for
                         unlimited)
   --option name value   Nix option to set
@@ -295,5 +343,6 @@ options:
   --result-format {json,junit}
                         Format of the build result file
   --override-input input_path flake_url
-                        Override a specific flake input (e.g. `dwarffs/nixpkgs`).
+                        Override a specific flake input (e.g.
+                        `dwarffs/nixpkgs`).
 ```
