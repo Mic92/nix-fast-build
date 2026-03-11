@@ -12,6 +12,9 @@ from nix_fast_build import async_main
 
 from .sshd import Sshd
 
+TEST_ROOT = Path(__file__).parent.resolve()
+FIXTURES = TEST_ROOT / "fixtures"
+
 
 def cli(args: list[str]) -> int:
     return asyncio.run(async_main(args))
@@ -64,6 +67,64 @@ def test_build_json() -> None:
 def test_eval_error() -> None:
     rc = cli(["--option", "builders", "", "--flake", ".#legacyPackages"])
     assert rc == 1
+
+
+def test_expr_build() -> None:
+    """Non-flake mode: evaluate and build a simple Nix expression."""
+    rc = cli(
+        [
+            "--file",
+            str(FIXTURES / "simple.nix"),
+            "--option",
+            "builders",
+            "",
+        ]
+    )
+    assert rc == 0
+
+
+def test_expr_build_with_attr() -> None:
+    """Non-flake mode: evaluate a specific attribute with -A."""
+    rc = cli(
+        [
+            "--file",
+            str(FIXTURES / "simple.nix"),
+            "-A",
+            "hello",
+            "--option",
+            "builders",
+            "",
+        ]
+    )
+    assert rc == 0
+
+
+def test_expr_remote_rejected() -> None:
+    """--remote is not supported in non-flake mode."""
+    with pytest.raises(SystemExit) as e:
+        cli(
+            [
+                "--file",
+                str(FIXTURES / "simple.nix"),
+                "--remote",
+                "somehost",
+            ]
+        )
+    assert e.value.code == 2
+
+
+def test_flake_mode_rejects_expr_flags() -> None:
+    """Expr-specific flags like -A should be rejected in flake mode."""
+    with pytest.raises(SystemExit) as e:
+        cli(["-A", "hello"])
+    assert e.value.code == 2
+
+
+def test_flake_and_expr_mutually_exclusive() -> None:
+    """--flake and --file cannot be used together."""
+    with pytest.raises(SystemExit) as e:
+        cli(["--flake", ".#checks", "--file", "default.nix"])
+    assert e.value.code == 2
 
 
 def test_remote(sshd: Sshd) -> None:
