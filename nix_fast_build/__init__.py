@@ -708,7 +708,10 @@ async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
 
 @asynccontextmanager
 async def nix_output_monitor(pipe: Pipe, opts: Options) -> AsyncIterator[Process]:
-    cmd = maybe_remote([*nix_shell("nixpkgs#nix-output-monitor", "nom")], opts)
+    cmd = maybe_remote(
+        [*nix_shell("nixpkgs#nix-output-monitor", "nom"), "--json"],
+        opts,
+    )
     proc = await asyncio.create_subprocess_exec(*cmd, stdin=pipe.read_file)
     try:
         yield proc
@@ -787,11 +790,15 @@ class Build:
     outputs: dict[str, str]
 
     async def build(
-        self, stack: AsyncExitStack, build_output: IO[str], opts: Options
+        self,
+        stack: AsyncExitStack,
+        build_output: IO[str],
+        opts: Options,
+        nom_pipe: IO[bytes] | None = None,
     ) -> BuildResult:
         """Build and return BuildResult."""
         proc = await stack.enter_async_context(
-            nix_build(self.attr, self.drv_path, build_output, opts)
+            nix_build(self.attr, self.drv_path, build_output, opts, nom_pipe=nom_pipe)
         )
 
         rc = 0
@@ -944,9 +951,15 @@ class QueueWithContext(Queue[T]):
 
 @asynccontextmanager
 async def nix_build(
-    attr: str, installable: str, stderr: IO[Any] | None, opts: Options
+    attr: str,
+    installable: str,
+    stderr: IO[Any] | None,
+    opts: Options,
+    nom_pipe: IO[bytes] | None = None,
 ) -> AsyncIterator[Process]:
     args = [*opts.nix_build_bin, installable, "--keep-going", *opts.options]
+    if nom_pipe is not None:
+        args += ["--log-format", "internal-json", "-v"]
     if opts.no_link:
         args += ["--no-link"]
     else:
@@ -957,12 +970,34 @@ async def nix_build(
 
     args = maybe_remote(args, opts)
     logger.debug("run %s", shlex.join(args))
-    proc = await asyncio.create_subprocess_exec(*args, stderr=stderr)
-    try:
-        yield proc
-    finally:
-        with contextlib.suppress(ProcessLookupError):
-            proc.kill()
+
+    if nom_pipe is not None:
+        # Capture stderr per-process so we can forward complete lines to nom,
+        # avoiding interleaved writes from concurrent builds on the shared pipe.
+        proc = await asyncio.create_subprocess_exec(
+            *args, stderr=asyncio.subprocess.PIPE
+        )
+
+        async def _forward_lines() -> None:
+            assert proc.stderr is not None
+            async for line in proc.stderr:
+                nom_pipe.write(line)
+                nom_pipe.flush()
+
+        fwd_task = asyncio.create_task(_forward_lines())
+        try:
+            yield proc
+        finally:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            await fwd_task
+    else:
+        proc = await asyncio.create_subprocess_exec(*args, stderr=stderr)
+        try:
+            yield proc
+        finally:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
 
 
 @dataclass
@@ -1035,6 +1070,7 @@ async def run_builds(
     optional_queues: list[QueueWithContext[Build | StopTask]],
     results: list[Result],
     opts: Options,
+    nom_pipe: IO[bytes] | None = None,
 ) -> int:
     drv_paths: set[Any] = set()
 
@@ -1051,7 +1087,9 @@ async def run_builds(
             drv_paths.add(job.drv_path)
             build = Build(job.attr, job.drv_path, job.outputs)
             start_time = timeit.default_timer()
-            build_result = await build.build(stack, build_output, opts)
+            build_result = await build.build(
+                stack, build_output, opts, nom_pipe=nom_pipe
+            )
             results.append(
                 Result(
                     result_type=ResultType.BUILD,
@@ -1508,9 +1546,12 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             )
         )
         evaluation = tasks[0]
+        # When nom is enabled, each nix-build captures its own stderr and
+        # forwards complete lines to the shared nom pipe, avoiding
+        # interleaved writes from concurrent builds.  build_output is only
+        # used as the nix-build stderr fd when nom is *not* active.
+        nom_pipe: IO[bytes] | None = pipe.write_file if pipe else None
         build_output = sys.stdout.buffer
-        if pipe:
-            build_output = pipe.write_file
         logger.debug("Starting %d build tasks", opts.max_jobs)
         for i in range(opts.max_jobs):
             tasks.append(
@@ -1522,6 +1563,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                         [oq.queue for oq in optional_queues],
                         results,
                         opts,
+                        nom_pipe=nom_pipe,
                     ),
                     name=f"build-{i}",
                 )
