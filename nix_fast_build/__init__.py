@@ -101,6 +101,7 @@ class Options:
 
     attic_cache: str | None = None
     attic_ignore_upstream_cache_filter: bool = False
+    attic_push_build_closure: bool = False
 
     niks3_server: str | None = None
 
@@ -298,6 +299,11 @@ async def parse_args(args: list[str]) -> Options:
     parser.add_argument(
         "--attic-ignore-upstream-cache-filter",
         help="Pass --ignore-upstream-cache-filter to attic push, uploading all paths even if attic thinks they exist in an upstream cache (default: false)",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--attic-push-build-closure",
+        help="Also push the build-time closure to attic, not just the runtime closure. Useful for caching intermediate build products in ephemeral CI environments (default: false)",
         action="store_true",
     )
     parser.add_argument(
@@ -512,6 +518,7 @@ async def parse_args(args: list[str]) -> Options:
         cachix_cache=a.cachix_cache,
         attic_cache=a.attic_cache,
         attic_ignore_upstream_cache_filter=a.attic_ignore_upstream_cache_filter,
+        attic_push_build_closure=a.attic_push_build_closure,
         niks3_server=a.niks3_server,
         no_link=a.no_link,
         out_link=a.out_link,
@@ -891,6 +898,45 @@ class Build:
         proc = await asyncio.create_subprocess_exec(*cmd)
         return await proc.wait()
 
+    async def _query_build_closure(self, opts: Options) -> list[str]:
+        """Query all realised store paths in the build closure of this derivation.
+
+        Returns output paths of all build-time requisites that exist in
+        the store.  After a successful build these are guaranteed to be
+        present because nix had to build or substitute every dependency.
+        """
+        query_cmd = maybe_remote(
+            [
+                "nix-store",
+                "--query",
+                "--requisites",
+                "--include-outputs",
+                self.drv_path,
+            ],
+            opts,
+        )
+        proc = await asyncio.create_subprocess_exec(
+            *query_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        if proc.returncode != 0:
+            logger.warning(
+                "nix-store -qR --include-outputs failed for %s (rc=%d), "
+                "falling back to output paths only",
+                self.drv_path,
+                proc.returncode,
+            )
+            return list(self.outputs.values())
+
+        paths: list[str] = []
+        for line in stdout.decode().splitlines():
+            path = line.strip()
+            if path and not path.endswith(".drv"):
+                paths.append(path)
+        return paths or list(self.outputs.values())
+
     async def upload_attic(self, opts: Options) -> int:
         if opts.attic_cache is None:
             return 0
@@ -900,7 +946,17 @@ class Build:
         if opts.attic_ignore_upstream_cache_filter:
             push_args.append("--ignore-upstream-cache-filter")
         push_args.append(opts.attic_cache)
-        push_args.extend(self.outputs.values())
+        if opts.attic_push_build_closure:
+            paths = await self._query_build_closure(opts)
+            push_args.append("--no-closure")
+            push_args.extend(paths)
+            logger.debug(
+                "attic push: %d paths (build closure) for %s",
+                len(paths),
+                self.attr,
+            )
+        else:
+            push_args.extend(self.outputs.values())
         cmd = maybe_remote(
             [
                 *nix_shell("nixpkgs#attic-client", "attic"),
