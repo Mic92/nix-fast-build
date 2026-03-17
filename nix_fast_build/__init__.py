@@ -100,6 +100,7 @@ class Options:
     cachix_cache: str | None = None
 
     attic_cache: str | None = None
+    attic_ignore_upstream_cache_filter: bool = False
 
     niks3_server: str | None = None
 
@@ -293,6 +294,11 @@ async def parse_args(args: list[str]) -> Options:
         "--attic-cache",
         help="Attic cache to upload to",
         default=None,
+    )
+    parser.add_argument(
+        "--attic-ignore-upstream-cache-filter",
+        help="Pass --ignore-upstream-cache-filter to attic push, uploading all paths even if attic thinks they exist in an upstream cache (default: false)",
+        action="store_true",
     )
     parser.add_argument(
         "--niks3-server",
@@ -505,6 +511,7 @@ async def parse_args(args: list[str]) -> Options:
         copy_to=a.copy_to,
         cachix_cache=a.cachix_cache,
         attic_cache=a.attic_cache,
+        attic_ignore_upstream_cache_filter=a.attic_ignore_upstream_cache_filter,
         niks3_server=a.niks3_server,
         no_link=a.no_link,
         out_link=a.out_link,
@@ -887,15 +894,17 @@ class Build:
     async def upload_attic(self, opts: Options) -> int:
         if opts.attic_cache is None:
             return 0
-        out = self.outputs.get("out")
-        if out is None:
+        if not self.outputs:
             return 0
+        push_args = ["push"]
+        if opts.attic_ignore_upstream_cache_filter:
+            push_args.append("--ignore-upstream-cache-filter")
+        push_args.append(opts.attic_cache)
+        push_args.extend(self.outputs.values())
         cmd = maybe_remote(
             [
                 *nix_shell("nixpkgs#attic-client", "attic"),
-                "push",
-                opts.attic_cache,
-                out,
+                *push_args,
             ],
             opts,
         )
