@@ -886,12 +886,15 @@ class Build:
     async def upload_attic(self, opts: Options) -> int:
         if opts.attic_cache is None:
             return 0
+        out = self.outputs.get("out")
+        if out is None:
+            return 0
         cmd = maybe_remote(
             [
                 *nix_shell("nixpkgs#attic-client", "attic"),
                 "push",
                 opts.attic_cache,
-                self.outputs["out"],
+                out,
             ],
             opts,
         )
@@ -957,7 +960,9 @@ async def nix_build(
     opts: Options,
     nom_pipe: IO[bytes] | None = None,
 ) -> AsyncIterator[Process]:
-    args = [*opts.nix_build_bin, installable, "--keep-going", *opts.options]
+    args = opts.nix_command(
+        ["build", f"{installable}^*", "--keep-going", *opts.options]
+    )
     if nom_pipe is not None:
         args += ["--log-format", "internal-json", "-v"]
     if opts.no_link:
@@ -1050,7 +1055,8 @@ async def run_evaluation(
         elif cache_status == "cached":
             continue
         elif cache_status == "local" and upload_queue is not None:
-            upload_queue.put_nowait(Build(attr, job["drvPath"], job.get("outputs", {})))
+            outputs = {k: v for k, v in job.get("outputs", {}).items() if v is not None}
+            upload_queue.put_nowait(Build(attr, job["drvPath"], outputs))
         system = job.get("system")
         if system and system not in opts.systems:
             continue
@@ -1058,7 +1064,7 @@ async def run_evaluation(
         if not drv_path:
             msg = f"nix-eval-jobs did not return a drvPath: {line.decode()}"
             raise Error(msg)
-        outputs = job.get("outputs", {})
+        outputs = {k: v for k, v in job.get("outputs", {}).items() if v is not None}
         build_queue.put_nowait(Job(attr, drv_path, outputs))
     return await eval_proc.wait()
 
