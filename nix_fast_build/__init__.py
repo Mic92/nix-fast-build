@@ -845,7 +845,7 @@ class Build:
         return await proc.wait()
 
     async def upload(self, exit_stack: AsyncExitStack, opts: Options) -> int:
-        if not opts.copy_to:
+        if not opts.copy_to or not self.outputs:
             return 0
         cmd = opts.nix_command(
             [
@@ -866,7 +866,7 @@ class Build:
     async def upload_cachix(
         self, cachix_socket_path: Path | None, opts: Options
     ) -> int:
-        if cachix_socket_path is None:
+        if cachix_socket_path is None or not self.outputs:
             return 0
         cmd = maybe_remote(
             [
@@ -903,7 +903,7 @@ class Build:
         return await proc.wait()
 
     async def download(self, exit_stack: AsyncExitStack, opts: Options) -> int:
-        if not opts.remote_url or not opts.download:
+        if not opts.remote_url or not opts.download or not self.outputs:
             return 0
         cmd = opts.nix_command(
             [
