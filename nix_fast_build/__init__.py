@@ -6,6 +6,7 @@ import json
 import logging
 import multiprocessing
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -1307,6 +1308,14 @@ class Summary:
     failed_attrs: list[str] = field(default_factory=list)
 
 
+def strip_ansi(raw: str) -> str:
+    """
+    Removes ANSI escape sequences as defined by ECMA-048 in
+    https://www.ecma-international.org/wp-content/uploads/ECMA-48_5th_edition_june_1991.pdf
+    """
+    return re.compile(r"\x1B\[\d+(;\d+){0,2}m").sub("", raw)
+
+
 def get_ci_summary_file() -> Path | None:
     """Get the CI summary file path from environment.
 
@@ -1358,7 +1367,7 @@ def format_failed_results(failed_results: dict[ResultType, list[Result]]) -> lis
             lines.append(f"\n**{result.attr}** (duration: {result.duration:.2f}s)\n")
             if result.log_output:
                 # Truncate very long logs (keep last 100 lines)
-                log_lines = result.log_output.strip().split("\n")
+                log_lines = strip_ansi(result.log_output).strip().split("\n")
                 if len(log_lines) > 100:
                     log_lines = [
                         "... (truncated, showing last 100 lines) ...",
