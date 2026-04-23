@@ -1313,7 +1313,19 @@ def strip_ansi(raw: str) -> str:
     Removes ANSI escape sequences as defined by ECMA-048 in
     https://www.ecma-international.org/wp-content/uploads/ECMA-48_5th_edition_june_1991.pdf
     """
-    return re.compile(r"\x1B\[\d+(;\d+){0,2}m").sub("", raw)
+    return re.compile(
+        r"""
+    \x1B  # ESC
+    (?:   # 7-bit C1 Fe (except CSI)
+        [@-Z\\-_]
+    |     # or [ for CSI, followed by a control sequence
+        \[
+        [0-?]*  # Parameter bytes
+        [ -/]*  # Intermediate bytes
+        [@-~]   # Final byte
+    )""",
+        re.VERBOSE,
+    ).sub("", raw)
 
 
 def get_ci_summary_file() -> Path | None:
