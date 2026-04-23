@@ -49,9 +49,9 @@ sed -i -e "s!^version = \".*\"\$!version = \"${version}\"!" pyproject.toml
 git add pyproject.toml default.nix
 nix flake check -vL
 git branch -D "release-${version}" || true
-git checkout -b "release-${version}"
+git checkout --no-track -b "release-${version}"
 git commit -m "bump version ${version}"
-git push origin "release-${version}"
+git push origin "HEAD:refs/heads/release-${version}"
 pr_url=$(gh pr create \
   --base main \
   --head "release-${version}" \
