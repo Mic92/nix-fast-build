@@ -183,6 +183,18 @@ $ nix run github:Mic92/nix-fast-build -- --flake github:NixOS/nixpkgs#legacyPack
 `nix-fast-build` does not iterate over different attributes; the full path must
 be explicitly stated.
 
+## Excluding or filtering attributes
+
+Use `--select` to pass a Nix function to `nix-eval-jobs` that transforms the
+evaluation root before traversal. The function receives the attribute selected
+by `--flake` (or `-A` in `--file` mode), so you can drop expensive jobs or pick
+a subset without changing your flake:
+
+```console
+$ nix-fast-build --flake .#checks.x86_64-linux \
+    --select 'checks: builtins.removeAttrs checks ["slow-integration-test"]'
+```
+
 ## Only evaluate the current system
 
 By default nix-fast-build will evaluate all systems in `.#checks`, you can limit
@@ -268,12 +280,15 @@ nix-shell -p python3Packages.junit2html --run 'junit2html result.xml result.html
 ## Reference
 
 ```console
-usage: nix-fast-build [-h] [-f FLAKE | --file [EXPR]] [-A ATTR]
-                      [--arg name value] [--argstr name value] [-I INCLUDE]
-                      [--impure] [--pure] [-j MAX_JOBS] [--option name value]
-                      [--remote-ssh-option name value]
+usage: nix-fast-build [-h] [--nix NIX] [--nix-eval-jobs NIX_EVAL_JOBS]
+                      [--nix-build NIX_BUILD] [-f FLAKE | --file [FILE]]
+                      [-A ATTR] [--arg name value] [--argstr name value]
+                      [-I INCLUDE] [--impure] [--pure] [-j MAX_JOBS]
+                      [--option name value] [--remote-ssh-option name value]
                       [--cachix-cache CACHIX_CACHE]
                       [--attic-cache ATTIC_CACHE]
+                      [--attic-ignore-upstream-cache-filter]
+                      [--attic-push-build-closure]
                       [--niks3-server NIKS3_SERVER] [--no-nom]
                       [--systems SYSTEMS] [--retries RETRIES] [--no-link]
                       [--out-link OUT_LINK] [--remote REMOTE]
@@ -284,11 +299,20 @@ usage: nix-fast-build [-h] [-f FLAKE | --file [EXPR]] [-A ATTR]
                       [--result-file RESULT_FILE]
                       [--result-format {json,junit}]
                       [--override-input input_path flake_url]
+                      [--select NIX_FUNCTION]
 
 options:
   -h, --help            show this help message and exit
+  --nix NIX             Path to the nix binary (default: $NIX_FAST_BUILD_NIX
+                        or 'nix')
+  --nix-eval-jobs NIX_EVAL_JOBS
+                        Path to the nix-eval-jobs binary (default:
+                        $NIX_FAST_BUILD_EVAL_JOBS or 'nix-eval-jobs')
+  --nix-build NIX_BUILD
+                        Path to the nix-build binary (default:
+                        $NIX_FAST_BUILD_NIX_BUILD or 'nix-build')
   -f, --flake FLAKE     Flake url to evaluate/build (default: .#checks)
-  --file [EXPR]         Nix expression file to evaluate (default:
+  --file [FILE]         Nix expression file to evaluate (default:
                         default.nix). Mutually exclusive with --flake.
   -A, --attr ATTR       Attribute path to evaluate in non-flake mode (like
                         nix-build -A)
@@ -311,6 +335,15 @@ options:
                         Cachix cache to upload to
   --attic-cache ATTIC_CACHE
                         Attic cache to upload to
+  --attic-ignore-upstream-cache-filter
+                        Pass --ignore-upstream-cache-filter to attic push,
+                        uploading all paths even if attic thinks they exist in
+                        an upstream cache (default: false)
+  --attic-push-build-closure
+                        Also push the build-time closure to attic, not just
+                        the runtime closure. Useful for caching intermediate
+                        build products in ephemeral CI environments (default:
+                        false)
   --niks3-server NIKS3_SERVER
                         Niks3 server URL to upload to (auth from
                         ~/.config/niks3/auth-token or NIKS3_AUTH_TOKEN_FILE)
@@ -345,4 +378,11 @@ options:
   --override-input input_path flake_url
                         Override a specific flake input (e.g.
                         `dwarffs/nixpkgs`).
+  --select NIX_FUNCTION
+                        Nix function applied to the evaluation root to filter
+                        or transform the set of attributes to build (passed
+                        through to nix-eval-jobs --select). The function
+                        receives the attribute selected by --flake/-A.
+                        Example: 'checks: builtins.removeAttrs checks ["slow-
+                        test"]'
 ```

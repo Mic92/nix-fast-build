@@ -69,6 +69,40 @@ def test_eval_error() -> None:
     assert rc == 1
 
 
+def test_select_flake() -> None:
+    """--select can filter out failing attributes so the build succeeds."""
+    rc = cli(
+        [
+            "--option",
+            "builders",
+            "",
+            "--flake",
+            ".#legacyPackages",
+            "--select",
+            # legacyPackages.<system> only contains intentionally broken
+            # packages; filtering them all out must yield a successful run.
+            "systems: builtins.mapAttrs (_: _: { }) systems",
+        ]
+    )
+    assert rc == 0
+
+
+def test_select_expr() -> None:
+    """--select is forwarded to nix-eval-jobs in non-flake mode."""
+    rc = cli(
+        [
+            "--file",
+            str(FIXTURES / "simple.nix"),
+            "--select",
+            "root: { inherit (root) hello; }",
+            "--option",
+            "builders",
+            "",
+        ]
+    )
+    assert rc == 0
+
+
 def test_expr_build() -> None:
     """Non-flake mode: evaluate and build a simple Nix expression."""
     rc = cli(
