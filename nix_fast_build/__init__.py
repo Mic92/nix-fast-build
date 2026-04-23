@@ -96,6 +96,7 @@ class Options:
     result_format: ResultFormat = ResultFormat.JSON
     result_file: Path | None = None
     override_inputs: list[list[str]] = field(default_factory=list)
+    select_expr: str | None = None
 
     cachix_cache: str | None = None
 
@@ -401,6 +402,18 @@ async def parse_args(args: list[str]) -> Options:
         metavar=("input_path", "flake_url"),
         help="Override a specific flake input (e.g. `dwarffs/nixpkgs`).",
     )
+    parser.add_argument(
+        "--select",
+        metavar="NIX_FUNCTION",
+        default=None,
+        help=(
+            "Nix function applied to the evaluation root to filter or "
+            "transform the set of attributes to build (passed through to "
+            "nix-eval-jobs --select). The function receives the attribute "
+            "selected by --flake/-A. "
+            "Example: 'checks: builtins.removeAttrs checks [\"slow-test\"]'"
+        ),
+    )
 
     a = parser.parse_args(args)
 
@@ -525,6 +538,7 @@ async def parse_args(args: list[str]) -> Options:
         result_format=ResultFormat[a.result_format.upper()],
         result_file=a.result_file,
         override_inputs=a.override_input,
+        select_expr=a.select,
     )
 
 
@@ -690,6 +704,8 @@ async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
                 f"{opts.flake_url}#{opts.flake_fragment}",
             ]
         )
+        if opts.select_expr is not None:
+            args.extend(["--select", opts.select_expr])
         if opts.override_inputs:
             for override in opts.override_inputs:
                 args.append("--override-input")
@@ -698,10 +714,16 @@ async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
     else:
         # Non-flake mode: pass expression file as positional arg
         args.extend(opts.expr_args)
-        if opts.expr_attr:
-            # Use --select to navigate to the desired attribute path,
-            # similar to nix-build -A but using nix-eval-jobs' native API
+        # nix-eval-jobs only accepts a single --select, so compose -A
+        # navigation with any user-supplied select function.
+        if opts.expr_attr and opts.select_expr is not None:
+            args.extend(
+                ["--select", f"root: ({opts.select_expr}) (root.{opts.expr_attr})"]
+            )
+        elif opts.expr_attr:
             args.extend(["--select", f"root: root.{opts.expr_attr}"])
+        elif opts.select_expr is not None:
+            args.extend(["--select", opts.select_expr])
         args.append(opts.expr_file)
     if opts.skip_cached:
         args.append("--check-cache-status")
