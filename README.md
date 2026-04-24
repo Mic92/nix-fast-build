@@ -300,6 +300,7 @@ usage: nix-fast-build [-h] [--nix NIX] [--nix-eval-jobs NIX_EVAL_JOBS]
                       [--result-format {json,junit}]
                       [--override-input input_path flake_url]
                       [--select NIX_FUNCTION]
+                      [--reference-lock-file REFERENCE_LOCK_FILE]
 
 options:
   -h, --help            show this help message and exit
@@ -385,4 +386,7 @@ options:
                         receives the attribute selected by --flake/-A.
                         Example: 'checks: builtins.removeAttrs checks ["slow-
                         test"]'
+  --reference-lock-file REFERENCE_LOCK_FILE
+                        Read the given lock file instead of `flake.lock`
+                        within the top-level flake.
 ```
