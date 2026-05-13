@@ -1426,6 +1426,18 @@ def strip_ansi(raw: str) -> str:
     ).sub("", raw)
 
 
+# Characters illegal in XML 1.0: everything in the C0 range except TAB, LF, CR
+_XML_ILLEGAL_CHARS_RE = re.compile(
+    "[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x84\x86-\x9f"
+    "\ud800-\udfff\ufdd0-\ufddf\ufffe\uffff]"
+)
+
+
+def strip_xml_illegal(raw: str) -> str:
+    """Remove characters that are illegal in XML 1.0."""
+    return _XML_ILLEGAL_CHARS_RE.sub("", raw)
+
+
 def get_ci_summary_file() -> Path | None:
     """Get the CI summary file path from environment.
 
@@ -1881,11 +1893,12 @@ def dump_junit_xml(file: IO[str], suite_name: str, build_results: list[Result]) 
         )
 
         if not result.success:
+            message = result.log_output or result.error or "<no message>"
             failure = ET.SubElement(
                 testcase,
                 "failure",
                 {
-                    "message": result.error or "<no message>",
+                    "message": strip_xml_illegal(strip_ansi(message)),
                     "type": "BuildFailure",
                 },
             )
