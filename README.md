@@ -102,6 +102,34 @@ Replace `youruser@yoursshhostname` with your SSH login credentials for the
 target machine. Please note that as of now, you must be recognized as a trusted
 user on the remote endpoint to access this feature.
 
+## Building against a remote store
+
+`--store` dispatches builds to a Nix store URL — like `nix build --store` —
+while still evaluating locally:
+
+```
+nix run github:Mic92/nix-fast-build -- --store ssh-ng://youruser@yoursshhostname
+```
+
+This is a thinner mechanism than `--remote`: it uses the Nix store protocol
+instead of running the whole pipeline over SSH shell exec. Pick whichever
+matches your setup:
+
+| Flag       | Mechanism                                       | Eval    | Outputs                | Uploads (`--copy-to`, cachix, attic, niks3) |
+| ---------- | ----------------------------------------------- | ------- | ---------------------- | ------------------------------------------- |
+| `--remote` | SSH in, run `nix-eval-jobs` + `nix build` there | On host | Copied back by default | Supported                                   |
+| `--store`  | `nix build --store <url>`                       | Local   | Stay in the store      | Not supported                               |
+
+`--store` is well suited to CI gates ("does this build?") where outputs do not
+need to come back. It implies `--no-link`, since result symlinks would point at
+paths that don't exist locally. It is mutually exclusive with `--remote`,
+`--copy-to`, `--cachix-cache`, `--attic-cache`, `--niks3-server`, and
+`--out-link`.
+
+`--skip-cached` checks the local store and configured substituters; it cannot
+see the contents of a remote `--store`. Derivations whose outputs already exist
+on the remote but nowhere locally will be re-queued, then no-op on the server.
+
 ## CI-Friendly Output
 
 By default, `Nix-output-monitor` (abbreviated as `nom`) updates its output every

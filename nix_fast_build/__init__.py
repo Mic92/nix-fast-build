@@ -78,6 +78,7 @@ class Options:
     expr_args: list[str] = field(default_factory=list)
     impure: bool = False
     options: list[str] = field(default_factory=list)
+    store: str | None = None
     remote: str | None = None
     remote_ssh_options: list[str] = field(default_factory=list)
     always_upload_source: bool = False
@@ -116,6 +117,19 @@ class Options:
         if self.remote is None:
             return None
         return f"ssh://{self.remote}"
+
+    @property
+    def store_args(self) -> list[str]:
+        """Args to append to nix commands that operate on the build store.
+
+        --eval-store auto is mandatory: without it, ``nix build --store X
+        <local-drv>^*`` follows ``eval-store=auto``'s "default to --store"
+        behaviour, fails to find the locally-evaluated .drv on the remote
+        store, and re-evaluates from scratch there.
+        """
+        if self.store is None:
+            return []
+        return ["--eval-store", "auto", "--store", self.store]
 
     @property
     def display_name(self) -> str:
@@ -343,6 +357,15 @@ async def parse_args(args: list[str]) -> Options:
         default="result",
     )
     parser.add_argument(
+        "--store",
+        type=str,
+        help=(
+            "Nix store to build against (e.g. ssh-ng://my-remote). Evaluation "
+            "always happens locally; only builds are dispatched to the given "
+            "store. Build outputs stay in that store. Implies --no-link."
+        ),
+    )
+    parser.add_argument(
         "--remote",
         type=str,
         help="Remote machine to build on",
@@ -427,6 +450,47 @@ async def parse_args(args: list[str]) -> Options:
 
     # Determine evaluation mode
     eval_mode = EvalMode.EXPR if a.file is not None else EvalMode.FLAKE
+
+    # Validate: --store conflicts. Outputs built with --store stay in the
+    # remote store, so anything that reads outputs from the local store (or
+    # depends on a particular store URL) cannot work alongside it.
+    if a.store:
+        if a.remote:
+            parser.error(
+                "--store and --remote are mutually exclusive: "
+                "--remote runs the whole pipeline over SSH, "
+                "--store dispatches builds via a Nix store URL"
+            )
+        if a.copy_to:
+            parser.error(
+                "--copy-to reads outputs from the local store; "
+                "outputs built with --store stay in the remote store"
+            )
+        if a.cachix_cache:
+            parser.error(
+                "--cachix-cache reads outputs from the local store; "
+                "outputs built with --store stay in the remote store"
+            )
+        if a.attic_cache:
+            parser.error(
+                "--attic-cache reads outputs from the local store; "
+                "outputs built with --store stay in the remote store"
+            )
+        if a.niks3_server:
+            parser.error(
+                "--niks3-server reads outputs from the local store; "
+                "outputs built with --store stay in the remote store"
+            )
+        if a.out_link != "result":
+            parser.error(
+                "--out-link is not supported with --store: "
+                "outputs stay in the remote store, the symlink would dangle"
+            )
+        if any(name in ("store", "eval-store") for name, _ in a.option):
+            parser.error(
+                "--option store/eval-store conflicts with --store; "
+                "use --store to set the build store"
+            )
 
     # Validate: --remote is not supported in non-flake mode
     if eval_mode == EvalMode.EXPR and a.remote:
@@ -541,7 +605,10 @@ async def parse_args(args: list[str]) -> Options:
         attic_ignore_upstream_cache_filter=a.attic_ignore_upstream_cache_filter,
         attic_push_build_closure=a.attic_push_build_closure,
         niks3_server=a.niks3_server,
-        no_link=a.no_link,
+        store=a.store,
+        # Outputs land in the build store, not locally — a result symlink
+        # would dangle. See "Out-link" validation above.
+        no_link=a.no_link or bool(a.store),
         out_link=a.out_link,
         result_format=ResultFormat[a.result_format.upper()],
         result_file=a.result_file,
@@ -863,7 +930,11 @@ class Build:
 
     async def get_build_log(self, opts: Options) -> str:
         """Get build log using nix log command."""
-        cmd = maybe_remote(opts.nix_command(["log", self.drv_path]), opts)
+        # Logs live in the build store. With --store, that's not the local
+        # store, so nix log must be pointed at the same store nix build used.
+        cmd = maybe_remote(
+            opts.nix_command(["log", self.drv_path, *opts.store_args]), opts
+        )
         logger.debug("run %s", shlex.join(cmd))
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -1060,7 +1131,7 @@ async def nix_build(
     nom_pipe: IO[bytes] | None = None,
 ) -> AsyncIterator[Process]:
     args = opts.nix_command(
-        ["build", f"{installable}^*", "--keep-going", *opts.options]
+        ["build", f"{installable}^*", "--keep-going", *opts.options, *opts.store_args]
     )
     if nom_pipe is not None:
         args += ["--log-format", "internal-json", "-v"]

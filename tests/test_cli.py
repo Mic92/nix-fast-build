@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from nix_fast_build import async_main
+from nix_fast_build import Build, Options, async_main, parse_args
 
 from .sshd import Sshd
 
@@ -197,6 +197,150 @@ def test_remote(sshd: Sshd) -> None:
             "--remote-ssh-option",
             "UserKnownHostsFile",
             "/dev/null",
+        ]
+    )
+    assert rc == 0
+
+
+def test_store_args_property() -> None:
+    """store_args must always pin --eval-store auto so nix build finds the
+    locally-evaluated .drv instead of re-evaluating against the remote store."""
+    opts = Options(store="ssh-ng://example.org")
+    assert opts.store_args == [
+        "--eval-store",
+        "auto",
+        "--store",
+        "ssh-ng://example.org",
+    ]
+
+
+def test_store_args_property_none() -> None:
+    """No store flag set means no extra args."""
+    opts = Options(store=None)
+    assert opts.store_args == []
+
+
+def test_store_implies_no_link() -> None:
+    """--store implies --no-link: outputs land in the remote store, so a
+    local out-link symlink would dangle."""
+    opts = asyncio.run(parse_args(["--store", "ssh-ng://example.org"]))
+    assert opts.store == "ssh-ng://example.org"
+    assert opts.no_link is True
+
+
+def test_store_remote_rejected() -> None:
+    """--store and --remote are different remote-build mechanisms."""
+    with pytest.raises(SystemExit) as e:
+        cli(["--store", "ssh-ng://x", "--remote", "y"])
+    assert e.value.code == 2
+
+
+def test_store_copy_to_rejected() -> None:
+    """nix copy reads from the local store; --store outputs aren't there."""
+    with pytest.raises(SystemExit) as e:
+        cli(["--store", "ssh-ng://x", "--copy-to", "file:///tmp/cache"])
+    assert e.value.code == 2
+
+
+def test_store_cachix_rejected() -> None:
+    """cachix reads from the local store; --store outputs aren't there."""
+    with pytest.raises(SystemExit) as e:
+        cli(["--store", "ssh-ng://x", "--cachix-cache", "mycache"])
+    assert e.value.code == 2
+
+
+def test_store_attic_rejected() -> None:
+    """attic reads from the local store; --store outputs aren't there."""
+    with pytest.raises(SystemExit) as e:
+        cli(["--store", "ssh-ng://x", "--attic-cache", "mycache"])
+    assert e.value.code == 2
+
+
+def test_store_niks3_rejected() -> None:
+    """niks3 reads from the local store; --store outputs aren't there."""
+    with pytest.raises(SystemExit) as e:
+        cli(["--store", "ssh-ng://x", "--niks3-server", "https://x"])
+    assert e.value.code == 2
+
+
+def test_store_out_link_rejected() -> None:
+    """A result symlink would dangle: outputs live in the remote store."""
+    with pytest.raises(SystemExit) as e:
+        cli(["--store", "ssh-ng://x", "--out-link", "build-result"])
+    assert e.value.code == 2
+
+
+def test_store_option_store_rejected() -> None:
+    """--option store and --store are ambiguous about which value wins."""
+    with pytest.raises(SystemExit) as e:
+        cli(["--store", "ssh-ng://x", "--option", "store", "ssh-ng://y"])
+    assert e.value.code == 2
+
+
+def test_store_option_eval_store_rejected() -> None:
+    """--option eval-store conflicts with the auto eval-store --store implies."""
+    with pytest.raises(SystemExit) as e:
+        cli(["--store", "ssh-ng://x", "--option", "eval-store", "local"])
+    assert e.value.code == 2
+
+
+def test_store_unusable_fails_build() -> None:
+    """An unusable --store must cause builds to fail.
+
+    Proves --store actually reaches nix build, not just argparse: nix
+    rejects an unknown store scheme synchronously when opening the store,
+    so this fails fast and without a real remote.
+    """
+    rc = cli(
+        [
+            "--option",
+            "builders",
+            "",
+            "--store",
+            "totally-bogus-scheme://x",
+        ]
+    )
+    assert rc != 0
+
+
+def test_store_args_reach_get_build_log() -> None:
+    """The build log lives in the build store; nix log must be pointed there.
+
+    nix log against an unknown store scheme errors with a message naming the
+    scheme, while nix log against the local store for a missing path errors
+    with "build log ... is not available". The scheme name in the returned
+    log proves nix log was invoked with --store.
+    """
+    opts = Options(store="totally-bogus-scheme://x")
+    b = Build(
+        attr="x",
+        drv_path="/nix/store/" + "a" * 32 + "-fake.drv",
+        outputs={},
+    )
+    log = asyncio.run(b.get_build_log(opts))
+    assert "totally-bogus-scheme" in log
+
+
+def test_store_ssh_ng(sshd: Sshd, monkeypatch: pytest.MonkeyPatch) -> None:
+    """End-to-end build against an ssh-ng:// store.
+
+    Unlike --remote (ssh shell exec), --store ssh-ng:// streams the daemon
+    protocol over an SSH channel. ssh-ng:// has no per-store SSH option
+    flags, so port/key go through NIX_SSHOPTS like nix itself documents.
+    """
+    login = pwd.getpwuid(os.getuid()).pw_name
+    monkeypatch.setenv(
+        "NIX_SSHOPTS",
+        f"-p {sshd.port} -i {sshd.key} "
+        f"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+    )
+    rc = cli(
+        [
+            "--option",
+            "builders",
+            "",
+            "--store",
+            f"ssh-ng://{login}@127.0.0.1",
         ]
     )
     assert rc == 0
