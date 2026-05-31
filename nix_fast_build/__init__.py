@@ -785,15 +785,21 @@ async def nix_output_monitor(pipe: Pipe, opts: Options) -> AsyncIterator[Process
     try:
         yield proc
     finally:
-        # FIXME: show cursor again after nom messing it up (nom doesn't handle signals properly)
         try:
+            # Send EOF then wait for nom to exit cleanly before killing it
             pipe.write_file.close()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=10)
+            except TimeoutError:
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+                await proc.wait()
             pipe.read_file.close()
-            with contextlib.suppress(ProcessLookupError):
-                proc.kill()
-            await proc.wait()
         finally:
-            print("\033[?25h")
+            # As nom doesn't restore terminal settings on exit, we show the cursor and enable
+            # autowrap otherwise long lines will get clipped and we avoid print to avoid
+            # the trailing newline.
+            print("\033[?25h\033[?7h", end="", flush=True)
 
 
 @asynccontextmanager
@@ -1653,9 +1659,15 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     eval_proc = await stack.enter_async_context(nix_eval_jobs(tmp_dir, opts))
     pipe: Pipe | None = None
     output_monitor: Process | None = None
+    # nom lives in its own stack so it can be torn down before the summary is
+    # logged; the parent stack closes it too in case we error out first.
+    nom_stack = AsyncExitStack()
     if opts.nom:
         pipe = stack.enter_context(Pipe())
-        output_monitor = await stack.enter_async_context(nix_output_monitor(pipe, opts))
+        output_monitor = await nom_stack.enter_async_context(
+            nix_output_monitor(pipe, opts)
+        )
+        stack.push_async_callback(nom_stack.aclose)
 
     cachix_socket_path: Path | None = None
     if opts.cachix_cache:
@@ -1801,6 +1813,10 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
 
         for task in tasks:
             assert task.done(), f"Task {task.get_name()} is not done"
+
+    # Stop nom before logging the summary: while it's alive its redraws clobber
+    # the output and it leaves the terminal in TUI mode, clipping long lines.
+    await nom_stack.aclose()
 
     rc = 0
     stats_by_type: dict[ResultType, Summary] = defaultdict(Summary)
