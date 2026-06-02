@@ -389,4 +389,6 @@ options:
   --reference-lock-file REFERENCE_LOCK_FILE
                         Read the given lock file instead of `flake.lock`
                         within the top-level flake.
+  --fail-fast           Stop as soon as any build or evaluation fails, instead of continuing with
+                        remaining builds (default: false)
 ```

@@ -97,6 +97,7 @@ class Options:
     result_file: Path | None = None
     override_inputs: list[list[str]] = field(default_factory=list)
     select_expr: str | None = None
+    fail_fast: bool = False
 
     reference_lock_file: str | None = None
 
@@ -422,6 +423,12 @@ async def parse_args(args: list[str]) -> Options:
         default=None,
         help="Read the given lock file instead of `flake.lock` within the top-level flake.",
     )
+    parser.add_argument(
+        "--fail-fast",
+        action="store_true",
+        default=False,
+        help="Stop as soon as any build or evaluation fails, instead of continuing with remaining builds (default: false)",
+    )
 
     a = parser.parse_args(args)
 
@@ -548,6 +555,7 @@ async def parse_args(args: list[str]) -> Options:
         override_inputs=a.override_input,
         select_expr=a.select,
         reference_lock_file=a.reference_lock_file,
+        fail_fast=a.fail_fast,
     )
 
 
@@ -1121,9 +1129,14 @@ async def run_evaluation(
     upload_queue: Queue[Build | StopTask] | None,
     result: list[Result],
     opts: Options,
+    stop_event: asyncio.Event | None = None,
 ) -> int:
     assert eval_proc.stdout
     async for line in eval_proc.stdout:
+        if stop_event is not None and stop_event.is_set():
+            logger.debug("fail-fast: stopping evaluation")
+            eval_proc.terminate()
+            break
         logger.debug(line.decode())
         try:
             job = json.loads(line)
@@ -1143,6 +1156,9 @@ async def run_evaluation(
             )
         )
         if error:
+            if stop_event is not None:
+                logger.debug("fail-fast: eval error, signalling stop")
+                stop_event.set()
             continue
         cache_status = job.get("cacheStatus")
         if cache_status is None:
@@ -1176,6 +1192,7 @@ async def run_builds(
     results: list[Result],
     opts: Options,
     nom_pipe: IO[bytes] | None = None,
+    stop_event: asyncio.Event | None = None,
 ) -> int:
     drv_paths: set[Any] = set()
 
@@ -1184,6 +1201,9 @@ async def run_builds(
             if isinstance(next_job, StopTask):
                 logger.debug("finish build task")
                 return 0
+            if stop_event is not None and stop_event.is_set():
+                logger.debug("fail-fast: skipping build of %s", next_job.attr)
+                continue
             job = next_job
             print(f"  building {job.attr}")
             sys.stdout.flush()
@@ -1211,6 +1231,9 @@ async def run_builds(
                 )
             )
             if build_result.return_code != 0:
+                if stop_event is not None:
+                    logger.debug("fail-fast: build failure, signalling stop")
+                    stop_event.set()
                 continue
             for queue in optional_queues:
                 queue.put_nowait(build)
@@ -1663,11 +1686,15 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         download_queue = QueueWithContext()
         optional_queues.append(OptionalQueue(download_queue, opts.max_jobs, "download"))
 
+    stop_event: asyncio.Event | None = asyncio.Event() if opts.fail_fast else None
+
     async with TaskGroup() as tg:
         tasks = []
         tasks.append(
             tg.create_task(
-                run_evaluation(eval_proc, build_queue, upload_queue, results, opts)
+                run_evaluation(
+                    eval_proc, build_queue, upload_queue, results, opts, stop_event
+                )
             )
         )
         evaluation = tasks[0]
@@ -1689,6 +1716,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                         results,
                         opts,
                         nom_pipe=nom_pipe,
+                        stop_event=stop_event,
                     ),
                     name=f"build-{i}",
                 )
