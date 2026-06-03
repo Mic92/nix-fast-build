@@ -1919,7 +1919,10 @@ def dump_junit_xml(file: IO[str], suite_name: str, build_results: list[Result]) 
                     "type": "BuildFailure",
                 },
             )
-            failure.text = result.error
+            # Strip ANSI escapes and XML-illegal control characters
+            # (C0 range except TAB/LF/CR) from log output for valid XML.
+            raw = strip_ansi(result.log_output or result.error or "")
+            failure.text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", raw)
 
     ET.ElementTree(testsuites).write(file, encoding="unicode")
 
