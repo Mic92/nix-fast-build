@@ -84,6 +84,21 @@ def test_eval_error() -> None:
     assert rc == 1
 
 
+def test_fail_fast() -> None:
+    """--fail-fast should still report failure when a build fails."""
+    rc = cli(
+        [
+            "--file",
+            str(FIXTURES / "fail.nix"),
+            "--option",
+            "builders",
+            "",
+            "--fail-fast",
+        ]
+    )
+    assert rc == 1
+
+
 def test_select_flake() -> None:
     """--select can filter out failing attributes so the build succeeds."""
     rc = cli(

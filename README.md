@@ -301,6 +301,7 @@ usage: nix-fast-build [-h] [--nix NIX] [--nix-eval-jobs NIX_EVAL_JOBS]
                       [--override-input input_path flake_url]
                       [--select NIX_FUNCTION]
                       [--reference-lock-file REFERENCE_LOCK_FILE]
+                      [--fail-fast]
 
 options:
   -h, --help            show this help message and exit
@@ -389,4 +390,6 @@ options:
   --reference-lock-file REFERENCE_LOCK_FILE
                         Read the given lock file instead of `flake.lock`
                         within the top-level flake.
+  --fail-fast           Stop as soon as any build or evaluation fails, instead of continuing with
+                        remaining builds (default: false)
 ```

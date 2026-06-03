@@ -97,8 +97,22 @@ class Options:
     result_file: Path | None = None
     override_inputs: list[list[str]] = field(default_factory=list)
     select_expr: str | None = None
+    fail_fast: bool = False
 
     reference_lock_file: str | None = None
+
+    _stop_event: asyncio.Event = field(
+        default_factory=asyncio.Event, init=False, repr=False
+    )
+
+    def signal_stop(self) -> None:
+        """Signal all tasks to stop (used by --fail-fast)."""
+        if self.fail_fast:
+            self._stop_event.set()
+
+    @property
+    def should_stop(self) -> bool:
+        return self.fail_fast and self._stop_event.is_set()
 
     cachix_cache: str | None = None
 
@@ -422,6 +436,12 @@ async def parse_args(args: list[str]) -> Options:
         default=None,
         help="Read the given lock file instead of `flake.lock` within the top-level flake.",
     )
+    parser.add_argument(
+        "--fail-fast",
+        action="store_true",
+        default=False,
+        help="Stop as soon as any build or evaluation fails, instead of continuing with remaining builds.",
+    )
 
     a = parser.parse_args(args)
 
@@ -548,6 +568,7 @@ async def parse_args(args: list[str]) -> Options:
         override_inputs=a.override_input,
         select_expr=a.select,
         reference_lock_file=a.reference_lock_file,
+        fail_fast=a.fail_fast,
     )
 
 
@@ -1124,6 +1145,10 @@ async def run_evaluation(
 ) -> int:
     assert eval_proc.stdout
     async for line in eval_proc.stdout:
+        if opts.should_stop:
+            logger.debug("fail-fast: stopping evaluation")
+            eval_proc.terminate()
+            break
         logger.debug(line.decode())
         try:
             job = json.loads(line)
@@ -1143,6 +1168,7 @@ async def run_evaluation(
             )
         )
         if error:
+            opts.signal_stop()
             continue
         cache_status = job.get("cacheStatus")
         if cache_status is None:
@@ -1184,6 +1210,9 @@ async def run_builds(
             if isinstance(next_job, StopTask):
                 logger.debug("finish build task")
                 return 0
+            if opts.should_stop:
+                logger.debug("fail-fast: skipping build of %s", next_job.attr)
+                continue
             job = next_job
             print(f"  building {job.attr}")
             sys.stdout.flush()
@@ -1211,6 +1240,7 @@ async def run_builds(
                 )
             )
             if build_result.return_code != 0:
+                opts.signal_stop()
                 continue
             for queue in optional_queues:
                 queue.put_nowait(build)
