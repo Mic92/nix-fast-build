@@ -78,6 +78,7 @@ class Options:
     expr_args: list[str] = field(default_factory=list)
     impure: bool = False
     options: list[str] = field(default_factory=list)
+    store: str | None = None
     remote: str | None = None
     remote_ssh_options: list[str] = field(default_factory=list)
     always_upload_source: bool = False
@@ -130,6 +131,14 @@ class Options:
         if self.remote is None:
             return None
         return f"ssh://{self.remote}"
+
+    @property
+    def store_args(self) -> list[str]:
+        """Extra args to point nix build/log at the build store."""
+        if self.store is None:
+            return []
+        # --eval-store auto ensures nix finds locally-evaluated .drvs
+        return ["--eval-store", "auto", "--store", self.store]
 
     @property
     def display_name(self) -> str:
@@ -357,6 +366,12 @@ async def parse_args(args: list[str]) -> Options:
         default="result",
     )
     parser.add_argument(
+        "--store",
+        type=str,
+        help="Nix store URL to build against (e.g. ssh-ng://host). "
+        "Evaluation stays local; only builds are dispatched. Implies --no-link.",
+    )
+    parser.add_argument(
         "--remote",
         type=str,
         help="Remote machine to build on",
@@ -447,6 +462,23 @@ async def parse_args(args: list[str]) -> Options:
 
     # Determine evaluation mode
     eval_mode = EvalMode.EXPR if a.file is not None else EvalMode.FLAKE
+
+    # Validate: --store conflicts — outputs stay in the remote store,
+    # so local-store features and --remote cannot work alongside it.
+    if a.store:
+        conflicts = [
+            (a.remote, "--remote"),
+            (a.copy_to, "--copy-to"),
+            (a.cachix_cache, "--cachix-cache"),
+            (a.attic_cache, "--attic-cache"),
+            (a.niks3_server, "--niks3-server"),
+            (a.out_link != "result", "--out-link"),
+        ]
+        for value, flag in conflicts:
+            if value:
+                parser.error(f"{flag} cannot be used with --store")
+        if any(name in ("store", "eval-store") for name, _ in a.option):
+            parser.error("--option store/eval-store conflicts with --store")
 
     # Validate: --remote is not supported in non-flake mode
     if eval_mode == EvalMode.EXPR and a.remote:
@@ -561,7 +593,8 @@ async def parse_args(args: list[str]) -> Options:
         attic_ignore_upstream_cache_filter=a.attic_ignore_upstream_cache_filter,
         attic_push_build_closure=a.attic_push_build_closure,
         niks3_server=a.niks3_server,
-        no_link=a.no_link,
+        store=a.store,
+        no_link=a.no_link or bool(a.store),
         out_link=a.out_link,
         result_format=ResultFormat[a.result_format.upper()],
         result_file=a.result_file,
@@ -884,7 +917,9 @@ class Build:
 
     async def get_build_log(self, opts: Options) -> str:
         """Get build log using nix log command."""
-        cmd = maybe_remote(opts.nix_command(["log", self.drv_path]), opts)
+        cmd = maybe_remote(
+            opts.nix_command(["log", self.drv_path, *opts.store_args]), opts
+        )
         logger.debug("run %s", shlex.join(cmd))
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -1081,7 +1116,7 @@ async def nix_build(
     nom_pipe: IO[bytes] | None = None,
 ) -> AsyncIterator[Process]:
     args = opts.nix_command(
-        ["build", f"{installable}^*", "--keep-going", *opts.options]
+        ["build", f"{installable}^*", "--keep-going", *opts.options, *opts.store_args]
     )
     if nom_pipe is not None:
         args += ["--log-format", "internal-json", "-v"]

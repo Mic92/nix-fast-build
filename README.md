@@ -102,6 +102,18 @@ Replace `youruser@yoursshhostname` with your SSH login credentials for the
 target machine. Please note that as of now, you must be recognized as a trusted
 user on the remote endpoint to access this feature.
 
+## Building against a remote store
+
+`--store` dispatches builds to a Nix store URL while evaluating locally:
+
+```
+nix run github:Mic92/nix-fast-build -- --store ssh-ng://youruser@yoursshhostname
+```
+
+Unlike `--remote` (which runs the whole pipeline over SSH), `--store` uses the
+Nix store protocol only. It implies `--no-link` since outputs stay in the remote
+store. It cannot be combined with `--remote`, `--copy-to`, or upload flags.
+
 ## CI-Friendly Output
 
 By default, `Nix-output-monitor` (abbreviated as `nom`) updates its output every
