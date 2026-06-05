@@ -785,15 +785,25 @@ async def nix_output_monitor(pipe: Pipe, opts: Options) -> AsyncIterator[Process
     try:
         yield proc
     finally:
-        # FIXME: show cursor again after nom messing it up (nom doesn't handle signals properly)
+        await stop_nom(proc, pipe)
+
+
+async def stop_nom(proc: Process, pipe: Pipe) -> None:
+    """Stop nom and restore the terminal. Safe to call multiple times."""
+    try:
+        # Closing the write end sends EOF, letting nom exit cleanly.
+        pipe.write_file.close()
         try:
-            pipe.write_file.close()
-            pipe.read_file.close()
+            await asyncio.wait_for(proc.wait(), timeout=10)
+        except TimeoutError:
             with contextlib.suppress(ProcessLookupError):
                 proc.kill()
             await proc.wait()
-        finally:
-            print("\033[?25h")
+        pipe.read_file.close()
+    finally:
+        # nom doesn't restore terminal settings on exit: re-enable the
+        # cursor and autowrap (disabled autowrap clips long lines).
+        print("\033[?25h\033[?7h", end="", flush=True)
 
 
 @asynccontextmanager
@@ -1801,6 +1811,11 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
 
         for task in tasks:
             assert task.done(), f"Task {task.get_name()} is not done"
+
+    # Stop nom before logging the summary so its final redraw doesn't clobber
+    # the output; the teardown in the stack is a no-op afterwards.
+    if pipe is not None and output_monitor is not None:
+        await stop_nom(output_monitor, pipe)
 
     rc = 0
     stats_by_type: dict[ResultType, Summary] = defaultdict(Summary)
