@@ -15,7 +15,7 @@ let
 in
 python3Packages.buildPythonApplication {
   pname = "nix-fast-build";
-  version = "1.5.0";
+  version = "1.6.0";
   format = "pyproject";
   src = ./.;
   buildInputs = with python3Packages; [
