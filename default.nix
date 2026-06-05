@@ -15,7 +15,7 @@ let
 in
 python3Packages.buildPythonApplication {
   pname = "nix-fast-build";
-  version = "1.6.0";
+  version = (lib.trivial.importTOML ./pyproject.toml).project.version;
   format = "pyproject";
   src = ./.;
   buildInputs = with python3Packages; [

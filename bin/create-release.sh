@@ -44,9 +44,8 @@ if git tag -l | grep -q "^${version}\$"; then
   echo "Tag ${version} already exists, exiting" >&2
   exit 1
 fi
-sed -i -e "s!version = \".*\";!version = \"${version}\";!" default.nix
 sed -i -e "s!^version = \".*\"\$!version = \"${version}\"!" pyproject.toml
-git add pyproject.toml default.nix
+git add pyproject.toml
 nix flake check -vL
 git branch -D "release-${version}" || true
 git checkout --no-track -b "release-${version}"
