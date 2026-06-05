@@ -1130,6 +1130,10 @@ async def nix_build(
     )
     if nom_pipe is not None:
         args += ["--log-format", "internal-json", "-v"]
+    else:
+        # Without nom, stream build logs directly to stderr so the user
+        # can see what builders are doing (especially useful in CI).
+        args += ["-L"]
     if opts.no_link:
         args += ["--no-link"]
     else:
