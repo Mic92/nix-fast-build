@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from nix_fast_build import async_main
+from nix_fast_build import async_main, parse_args
 
 from .sshd import Sshd
 
@@ -212,6 +212,49 @@ def test_remote(sshd: Sshd) -> None:
             "--remote-ssh-option",
             "UserKnownHostsFile",
             "/dev/null",
+        ]
+    )
+    assert rc == 0
+
+
+def test_store_implies_no_link() -> None:
+    opts = asyncio.run(parse_args(["--store", "ssh-ng://x"]))
+    assert opts.no_link is True
+
+
+@pytest.mark.parametrize(
+    "extra_args",
+    [
+        ["--remote", "y"],
+        ["--copy-to", "file:///tmp/c"],
+        ["--cachix-cache", "c"],
+        ["--attic-cache", "c"],
+        ["--niks3-server", "https://x"],
+        ["--out-link", "my-result"],
+        ["--option", "store", "ssh-ng://y"],
+        ["--option", "eval-store", "local"],
+    ],
+)
+def test_store_conflicts(extra_args: list[str]) -> None:
+    with pytest.raises(SystemExit) as e:
+        cli(["--store", "ssh-ng://x", *extra_args])
+    assert e.value.code == 2
+
+
+def test_store_ssh_ng(sshd: Sshd, monkeypatch: pytest.MonkeyPatch) -> None:
+    login = pwd.getpwuid(os.getuid()).pw_name
+    monkeypatch.setenv(
+        "NIX_SSHOPTS",
+        f"-p {sshd.port} -i {sshd.key} "
+        f"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+    )
+    rc = cli(
+        [
+            "--option",
+            "builders",
+            "",
+            "--store",
+            f"ssh-ng://{login}@127.0.0.1",
         ]
     )
     assert rc == 0
