@@ -16,11 +16,8 @@ jobs:
         with:
           # Nix Flakes doesn't work on shallow clones
           fetch-depth: 0
-      - uses: cachix/install-nix-action@v31
-        with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
-          extra_nix_config: |
-            accept-flake-config = true
+      - uses: NixOS/nix-installer-action@main
+      - uses: Mic92/hestia/action@main
       - name: Self-test
         run: nix shell --inputs-from . nixpkgs#coreutils -c timeout --verbose 600 nix run . -- ${{ matrix.nom }}
 
@@ -40,11 +37,8 @@ jobs:
         with:
           # Nix Flakes doesn't work on shallow clones
           fetch-depth: 0
-      - uses: cachix/install-nix-action@v31
-        with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
-          extra_nix_config: |
-            accept-flake-config = true
+      - uses: NixOS/nix-installer-action@main
+      - uses: Mic92/hestia/action@main
       - name: Install nix-eval-jobs for remote test
         run: nix profile install --inputs-from . nixpkgs#nix-eval-jobs
       - run: command -v nix-eval-jobs && nix-eval-jobs --help
