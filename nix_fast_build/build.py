@@ -12,10 +12,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any, TypeVar
 
-from .ci_renderer import BuildOutput, CIRenderer
+from .ci_renderer import CIRenderer
 from .log_format import LogParser
 from .options import Options, maybe_remote, nix_shell
 from .processes import ensure_stop
+from .renderer import BuildOutput
 
 logger = logging.getLogger(__name__)
 

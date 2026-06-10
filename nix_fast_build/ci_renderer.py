@@ -14,17 +14,9 @@ import contextlib
 import time
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import IO
 
-from .log_format import (
-    BuildLogLine,
-    LogEvent,
-    Message,
-    PhaseChanged,
-    PlainLine,
-)
-from .term import sanitize_line
+from .renderer import BuildOutput, fmt_duration
 
 GREEN = "\x1b[32m"
 RED = "\x1b[31m"
@@ -33,52 +25,6 @@ BOLD = "\x1b[1m"
 RESET = "\x1b[0m"
 
 STALL_TAIL_LINES = 5
-
-
-def fmt_duration(seconds: float) -> str:
-    m, s = divmod(int(seconds), 60)
-    h, m = divmod(m, 60)
-    if h:
-        return f"{h}h{m:02d}m{s:02d}s"
-    if m:
-        return f"{m}m{s:02d}s"
-    return f"{s}s"
-
-
-@dataclass(eq=False)  # identity-hashed so CIRenderer can keep a set
-class BuildOutput:
-    """Per-build log sink fed by the internal-json parser."""
-
-    attr: str
-    drv_path: str
-    renderer: "CIRenderer"
-    started_at: float
-    last_output_at: float
-    lines: deque[str]
-    phase: str | None = None
-    streaming: bool = False
-
-    def on_event(self, event: LogEvent) -> None:
-        match event:
-            case BuildLogLine(line=line) | PlainLine(line=line):
-                self._add_line(sanitize_line(line))
-            case PhaseChanged(phase=phase):
-                self.phase = phase
-                self._add_line(f"@ phase {phase}")
-            case Message(level=level, msg=msg) if level <= 2:
-                # Warnings and errors; the final level-0 error message
-                # carries the failure reason and the nix log command.
-                for msg_line in msg.splitlines():
-                    self._add_line(sanitize_line(msg_line))
-
-    def _add_line(self, line: str) -> None:
-        self.last_output_at = self.renderer.clock()
-        self.lines.append(line)
-        if self.streaming:
-            self.renderer.emit_live_line(self, line)
-
-    def elapsed(self) -> float:
-        return self.renderer.clock() - self.started_at
 
 
 class CIRenderer:

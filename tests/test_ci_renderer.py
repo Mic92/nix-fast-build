@@ -1,12 +1,13 @@
 import io
 
-from nix_fast_build.ci_renderer import BuildOutput, CIRenderer, fmt_duration
+from nix_fast_build.ci_renderer import CIRenderer
 from nix_fast_build.log_format import (
     BuildLogLine,
     Message,
     PhaseChanged,
     PlainLine,
 )
+from nix_fast_build.renderer import BuildOutput, fmt_duration
 
 DRV = "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-x.drv"
 
