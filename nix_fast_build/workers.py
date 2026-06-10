@@ -1,0 +1,312 @@
+import asyncio
+import json
+import logging
+import os
+import shlex
+import sys
+import timeit
+from asyncio import Queue
+from asyncio.subprocess import Process
+from contextlib import AsyncExitStack
+from pathlib import Path
+from typing import IO, Any
+
+from .build import Build, Job, QueueWithContext, StopTask
+from .errors import Error
+from .options import Options, maybe_remote, nix_shell
+from .results import Result, ResultType
+
+logger = logging.getLogger(__name__)
+
+
+async def run_evaluation(
+    eval_proc: Process,
+    build_queue: Queue[Job | StopTask],
+    upload_queue: Queue[Build | StopTask] | None,
+    result: list[Result],
+    opts: Options,
+) -> int:
+    assert eval_proc.stdout
+    async for line in eval_proc.stdout:
+        if opts.should_stop:
+            logger.debug("fail-fast: stopping evaluation")
+            eval_proc.terminate()
+            break
+        logger.debug(line.decode())
+        try:
+            job = json.loads(line)
+        except json.JSONDecodeError as e:
+            msg = f"Failed to parse line of nix-eval-jobs output: {line.decode()}"
+            raise Error(msg) from e
+        error = job.get("error")
+        attr = job.get("attr", "unknown-attribute")
+        result.append(
+            Result(
+                result_type=ResultType.EVAL,
+                attr=attr,
+                success=error is None,
+                # TODO: maybe add this to nix-eval-jobs?
+                duration=0.0,
+                error=error,
+            )
+        )
+        if error:
+            opts.signal_stop()
+            continue
+        cache_status = job.get("cacheStatus")
+        if cache_status is None:
+            # Legacy attribute
+            if job.get("isCached", False):
+                continue
+        # Skip remotely cached jobs, but still consider
+        # them for pushing if they are cached locally
+        elif cache_status == "cached":
+            continue
+        elif cache_status == "local" and upload_queue is not None:
+            outputs = {k: v for k, v in job.get("outputs", {}).items() if v is not None}
+            upload_queue.put_nowait(Build(attr, job["drvPath"], outputs))
+        system = job.get("system")
+        if system and system not in opts.systems:
+            continue
+        drv_path = job.get("drvPath")
+        if not drv_path:
+            msg = f"nix-eval-jobs did not return a drvPath: {line.decode()}"
+            raise Error(msg)
+        outputs = {k: v for k, v in job.get("outputs", {}).items() if v is not None}
+        build_queue.put_nowait(Job(attr, drv_path, outputs))
+    return await eval_proc.wait()
+
+
+async def run_builds(
+    stack: AsyncExitStack,
+    build_output: IO,
+    build_queue: QueueWithContext[Job | StopTask],
+    optional_queues: list[QueueWithContext[Build | StopTask]],
+    results: list[Result],
+    opts: Options,
+    nom_pipe: IO[bytes] | None = None,
+) -> int:
+    drv_paths: set[Any] = set()
+
+    while True:
+        async with build_queue.get_context() as next_job:
+            if isinstance(next_job, StopTask):
+                logger.debug("finish build task")
+                return 0
+            if opts.should_stop:
+                logger.debug("fail-fast: skipping build of %s", next_job.attr)
+                continue
+            job = next_job
+            print(f"  building {job.attr}")
+            sys.stdout.flush()
+            if job.drv_path in drv_paths:
+                continue
+            drv_paths.add(job.drv_path)
+            build = Build(job.attr, job.drv_path, job.outputs)
+            start_time = timeit.default_timer()
+            build_result = await build.build(
+                stack, build_output, opts, nom_pipe=nom_pipe
+            )
+            results.append(
+                Result(
+                    result_type=ResultType.BUILD,
+                    attr=job.attr,
+                    success=build_result.return_code == 0,
+                    duration=timeit.default_timer() - start_time,
+                    error=f"build exited with {build_result.return_code}"
+                    if build_result.return_code != 0
+                    else None,
+                    log_output=build_result.log_output
+                    if build_result.return_code != 0
+                    else None,
+                    outputs=job.outputs or None,
+                )
+            )
+            if build_result.return_code != 0:
+                opts.signal_stop()
+                continue
+            for queue in optional_queues:
+                queue.put_nowait(build)
+
+
+async def run_uploads(
+    stack: AsyncExitStack,
+    upload_queue: QueueWithContext[Build | StopTask],
+    results: list[Result],
+    opts: Options,
+) -> int:
+    while True:
+        async with upload_queue.get_context() as build:
+            if isinstance(build, StopTask):
+                logger.debug("finish upload task")
+                return 0
+            start_time = timeit.default_timer()
+            rc = await build.upload(stack, opts)
+            results.append(
+                Result(
+                    result_type=ResultType.UPLOAD,
+                    attr=build.attr,
+                    success=rc == 0,
+                    duration=timeit.default_timer() - start_time,
+                    # TODO: add log output here
+                    error=f"upload exited with {rc}" if rc != 0 else None,
+                )
+            )
+
+
+async def run_cachix_upload(
+    cachix_queue: QueueWithContext[Build | StopTask],
+    cachix_socket_path: Path,
+    results: list[Result],
+    opts: Options,
+) -> int:
+    while True:
+        async with cachix_queue.get_context() as build:
+            if isinstance(build, StopTask):
+                logger.debug("finish cachix upload task")
+                return 0
+            start_time = timeit.default_timer()
+            rc = await build.upload_cachix(cachix_socket_path, opts)
+            results.append(
+                Result(
+                    result_type=ResultType.CACHIX,
+                    attr=build.attr,
+                    success=rc == 0,
+                    duration=timeit.default_timer() - start_time,
+                    error=f"cachix upload exited with {rc}" if rc != 0 else None,
+                )
+            )
+
+
+async def run_attic_upload(
+    attic_queue: QueueWithContext[Build | StopTask],
+    results: list[Result],
+    opts: Options,
+) -> int:
+    while True:
+        async with attic_queue.get_context() as build:
+            if isinstance(build, StopTask):
+                logger.debug("finish attic upload task")
+                return 0
+            start_time = timeit.default_timer()
+            rc = await build.upload_attic(opts)
+            results.append(
+                Result(
+                    result_type=ResultType.ATTIC,
+                    attr=build.attr,
+                    success=rc == 0,
+                    duration=timeit.default_timer() - start_time,
+                    error=f"attic upload exited with {rc}" if rc != 0 else None,
+                )
+            )
+
+
+async def run_niks3_upload(
+    niks3_queue: QueueWithContext[Build | StopTask],
+    results: list[Result],
+    opts: Options,
+) -> int:
+    while True:
+        # Wait for at least one item
+        async with niks3_queue.get_context() as first_item:
+            if isinstance(first_item, StopTask):
+                logger.debug("finish niks3 upload task")
+                return 0
+
+            # Collect this build plus any others currently queued
+            builds: list[Build] = [first_item]
+            while not niks3_queue.empty():
+                try:
+                    item = niks3_queue.get_nowait()
+                    niks3_queue.task_done()
+                    if isinstance(item, StopTask):
+                        # Put it back for proper shutdown
+                        niks3_queue.put_nowait(item)
+                        break
+                    builds.append(item)
+                except asyncio.QueueEmpty:
+                    break
+
+            # Collect all output paths
+            all_outputs: list[str] = []
+            for build in builds:
+                all_outputs.extend(build.outputs.values())
+
+            start_time = timeit.default_timer()
+            env = os.environ.copy()
+            # niks3_server is guaranteed non-None since this worker is only created when configured
+            assert opts.niks3_server is not None
+            env["NIKS3_SERVER_URL"] = opts.niks3_server
+            cmd = maybe_remote(
+                [
+                    *nix_shell("github:Mic92/niks3", "niks3"),
+                    "push",
+                    *all_outputs,
+                ],
+                opts,
+            )
+            logger.debug("run %s", shlex.join(cmd))
+            proc = await asyncio.create_subprocess_exec(*cmd, env=env)
+            rc = await proc.wait()
+            duration = timeit.default_timer() - start_time
+
+            # Record result for each build
+            results.extend(
+                Result(
+                    result_type=ResultType.NIKS3,
+                    attr=build.attr,
+                    success=rc == 0,
+                    duration=duration / len(builds),
+                    error=f"niks3 upload exited with {rc}" if rc != 0 else None,
+                )
+                for build in builds
+            )
+
+
+async def run_downloads(
+    stack: AsyncExitStack,
+    download_queue: QueueWithContext[Build | StopTask],
+    results: list[Result],
+    opts: Options,
+) -> int:
+    while True:
+        async with download_queue.get_context() as build:
+            if isinstance(build, StopTask):
+                logger.debug("finish download task")
+                return 0
+            start_time = timeit.default_timer()
+            rc = await build.download(stack, opts)
+            results.append(
+                Result(
+                    result_type=ResultType.DOWNLOAD,
+                    attr=build.attr,
+                    success=rc == 0,
+                    duration=timeit.default_timer() - start_time,
+                    error=f"download exited with {rc}" if rc != 0 else None,
+                )
+            )
+
+
+async def report_progress(
+    build_queue: QueueWithContext,
+    upload_queue: QueueWithContext | None,
+    download_queue: QueueWithContext | None,
+) -> int:
+    old_status = ""
+    try:
+        while True:
+            builds = build_queue.qsize() + build_queue.running_tasks
+            new_status = f"builds: {builds}"
+            if upload_queue is not None:
+                uploads = upload_queue.qsize() + upload_queue.running_tasks
+                new_status += f", uploads: {uploads}"
+            if download_queue is not None:
+                downloads = download_queue.qsize() + download_queue.running_tasks
+                new_status += f", downloads: {downloads}"
+            if new_status != old_status:
+                logger.info(new_status)
+                old_status = new_status
+            await asyncio.sleep(0.5)
+    except asyncio.CancelledError:
+        pass
+    return 0
