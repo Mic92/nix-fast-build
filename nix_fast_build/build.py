@@ -5,7 +5,7 @@ import os
 import shlex
 from asyncio import Queue
 from asyncio.subprocess import Process
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -224,11 +224,12 @@ T = TypeVar("T")
 
 @dataclass
 class OptionalQueue:
-    """Tracks an optional queue and its worker count for proper shutdown."""
+    """Post-build queue with the workers that drain it, for proper shutdown."""
 
     queue: "QueueWithContext[Build | StopTask]"
     worker_count: int
     name: str
+    make_worker: Callable[[], Coroutine[Any, Any, int]]
 
 
 class QueueWithContext(Queue[T]):
