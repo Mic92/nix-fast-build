@@ -4,6 +4,7 @@ import logging
 import shlex
 import signal
 import subprocess
+import sys
 from asyncio.subprocess import Process
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -32,7 +33,10 @@ async def ensure_stop(
                 try:
                     await asyncio.wait_for(proc.wait(), timeout=wait_timeout)
                 except TimeoutError:
-                    print(f"Failed to stop process {shlex.join(cmd)}. Killing it.")
+                    print(
+                        f"Failed to stop process {shlex.join(cmd)}. Killing it.",
+                        file=sys.stderr,
+                    )
                     proc.kill()
                     await proc.wait()
 

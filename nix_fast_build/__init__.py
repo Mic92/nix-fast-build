@@ -253,9 +253,9 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
 async def async_main(args: list[str]) -> int:
     opts = await parse_args(args)
     if opts.debug:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
     else:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
     stack = AsyncExitStack()
     # using async wait here seems to make the return value skipped in the non-execptional case

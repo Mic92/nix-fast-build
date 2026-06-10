@@ -98,8 +98,8 @@ async def run_builds(
                 logger.debug("fail-fast: skipping build of %s", next_job.attr)
                 continue
             job = next_job
-            print(f"  building {job.attr}")
-            sys.stdout.flush()
+            print(f"  building {job.attr}", file=sys.stderr)
+            sys.stderr.flush()
             if job.drv_path in drv_paths:
                 continue
             drv_paths.add(job.drv_path)
