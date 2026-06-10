@@ -82,11 +82,8 @@ async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
         )
         if opts.select_expr is not None:
             args.extend(["--select", opts.select_expr])
-        if opts.override_inputs:
-            for override in opts.override_inputs:
-                args.append("--override-input")
-                args.append(override[0])
-                args.append(override[1])
+        for input_path, flake_url in opts.override_inputs:
+            args.extend(["--override-input", input_path, flake_url])
         if opts.reference_lock_file:
             args.extend(["--reference-lock-file", opts.reference_lock_file])
     else:
