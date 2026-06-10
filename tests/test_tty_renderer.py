@@ -105,8 +105,8 @@ def test_lifecycle_and_failure_extract() -> None:
     assert r.failed == [bad]
     assert not r.running
     text = ANSI.sub("", out.getvalue())
-    assert "✔  good  1m05s" in text
-    assert "✘  bad  1m05s  rc=1" in text
+    assert "✔ good  1m05s" in text
+    assert "✘ bad  1m05s  rc=1" in text
     # Extract: last 5 lines only.
     assert "bad> l5" in text
     assert "bad> l4" not in text
@@ -120,6 +120,32 @@ def test_abort_is_silent() -> None:
     r.abort_build(b)
     assert out.getvalue() == before
     assert not r.running
+
+
+def test_render_summary_counts_and_elapsed() -> None:
+    r, _out, clock = make_renderer()
+    good = r.start_build("good", DRV)
+    bad = r.start_build("bad", DRV)
+    aborted = r.start_build("aborted", DRV)
+    clock.now += 65
+    r.finish_build(good, 0)
+    r.finish_build(bad, 1)
+    r.abort_build(aborted)
+    text = ANSI.sub("", r.render_summary())
+    assert "✔ 1 succeeded" in text
+    assert "✘ 1 failed" in text
+    assert "⏹ 1 aborted" in text
+    assert "1m05s" in text
+
+
+def test_render_summary_omits_zero_counts() -> None:
+    r, _out, _clock = make_renderer()
+    good = r.start_build("good", DRV)
+    r.finish_build(good, 0)
+    text = ANSI.sub("", r.render_summary())
+    assert "✔ 1 succeeded" in text
+    assert "failed" not in text
+    assert "aborted" not in text
 
 
 def test_render_normal_rows() -> None:
