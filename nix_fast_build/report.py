@@ -248,9 +248,9 @@ def dump_junit_xml(file: IO[str], suite_name: str, build_results: list[Result]) 
     Generates a JUnit XML report based on the results of Nix builds.
 
     Args:
+        file: The output file where the XML report will be written.
         suite_name: Human-readable name for the test suite.
         build_results: A list of Result instances containing build result data.
-        file: The output file where the XML report will be written.
     """
     testsuites = ET.Element("testsuites")
     testsuite = ET.SubElement(
