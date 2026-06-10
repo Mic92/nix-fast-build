@@ -517,9 +517,6 @@ async def parse_args(args: list[str]) -> Options:
     else:
         systems = set(a.systems.split(" "))
 
-    if a.no_nom is False and a.stream_json_lines:
-        parser.error("--stream-json-lines implies --no-nom")
-
     return Options(
         nix_bin=nix_bin,
         nix_eval_jobs_bin=nix_eval_jobs_bin,
