@@ -1,6 +1,6 @@
 import io
 
-from nix_fast_build.ci_renderer import CIRenderer
+from nix_fast_build.ci_renderer import FAILURE_TAIL_LINES, CIRenderer
 from nix_fast_build.log_format import (
     BuildLogLine,
     Message,
@@ -164,3 +164,22 @@ def test_color_applied() -> None:
     b = renderer.start_build("pkg", DRV)
     renderer.finish_build(b, 0)
     assert "\x1b[32m✔  pkg" in out.getvalue()
+
+
+def test_long_failure_log_folds_head() -> None:
+    r, out, _clock = make_renderer(fold=True)
+    b = r.start_build("big", DRV)
+    feed(b, *(f"line {i}" for i in range(FAILURE_TAIL_LINES + 50)))
+    r.finish_build(b, 1)
+    text = out.getvalue()
+    # Head folded, tail (incl. the error at the end) visible.
+    assert "::group::earlier output (50 lines)" in text
+    head, _, tail = text.partition("::endgroup::")
+    assert "big> line 0" in head
+    assert f"big> line {FAILURE_TAIL_LINES + 49}" in tail
+    # Short failure logs stay fully unfolded.
+    r2, out2, _clock = make_renderer(fold=True)
+    b2 = r2.start_build("small", DRV)
+    feed(b2, "boom")
+    r2.finish_build(b2, 1)
+    assert "::group::earlier output" not in out2.getvalue()

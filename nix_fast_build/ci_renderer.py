@@ -18,6 +18,9 @@ from typing import IO
 
 from .renderer import BuildOutput, fmt_duration
 
+# Unfolded tail of a failure log; earlier output gets folded.
+FAILURE_TAIL_LINES = 200
+
 GREEN = "\x1b[32m"
 RED = "\x1b[31m"
 DIM = "\x1b[2m"
@@ -103,13 +106,24 @@ class CIRenderer:
             self._print(verdict, *self._prefixed(build))
 
     def _emit_failure(self, build: BuildOutput, rc: int, duration: str) -> None:
-        # Never folded: failures must be visible and searchable in CI.
+        # The error is almost always at the end: keep the tail visible,
+        # fold the rest so multi-failure CI pages stay scrollable.
         dropped = ""
         if len(build.lines) == build.lines.maxlen:
             dropped = f" (oldest lines dropped, buffer={build.lines.maxlen})"
+        lines = self._prefixed(build)
+        body = lines
+        if self.fold and len(lines) > FAILURE_TAIL_LINES:
+            head = lines[:-FAILURE_TAIL_LINES]
+            body = [
+                f"::group::earlier output ({len(head)} lines)",
+                *head,
+                "::endgroup::",
+                *lines[-FAILURE_TAIL_LINES:],
+            ]
         self._print(
             self._verdict_line(build, rc, duration) + dropped,
-            *self._prefixed(build),
+            *body,
             self._sgr(RED, f"✘ end of log for {build.attr} · nix log {build.drv_path}"),
         )
 
