@@ -22,6 +22,16 @@ class Result:
     log_output: str | None = None
     outputs: dict[str, str] | None = None
 
+    def as_dict(self) -> dict:
+        return {
+            "type": self.result_type.name,
+            "attr": self.attr,
+            "success": self.success,
+            "duration": self.duration,
+            "error": self.error,
+            **({"outputs": self.outputs} if self.outputs is not None else {}),
+        }
+
 
 @dataclass
 class Summary:

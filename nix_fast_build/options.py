@@ -55,6 +55,7 @@ class Options:
     download: bool = True
     no_link: bool = False
     out_link: str = "result"
+    stream_json_lines: bool = False
     result_format: ResultFormat = ResultFormat.JSON
     result_file: Path | None = None
     override_inputs: list[list[str]] = field(default_factory=list)
@@ -371,6 +372,12 @@ async def parse_args(args: list[str]) -> Options:
         help="Format of the build result file",
     )
     parser.add_argument(
+        "--stream-json-lines",
+        action="store_true",
+        default=False,
+        help="Stream results to standard output as JSON Lines",
+    )
+    parser.add_argument(
         "--override-input",
         action="append",
         nargs=2,
@@ -493,7 +500,9 @@ async def parse_args(args: list[str]) -> Options:
     if a.max_jobs is None:
         a.max_jobs = int(nix_config.get("max-jobs", 0))
     if a.no_nom is None:
-        if a.remote:
+        if a.stream_json_lines:
+            a.no_nom = True
+        elif a.remote:
             # only if we have an official binary cache, otherwise we need to build ghc...
             a.no_nom = nix_config.get("system", "") not in [
                 "aarch64-darwin",
@@ -507,6 +516,9 @@ async def parse_args(args: list[str]) -> Options:
         systems = {nix_config.get("system", "")}
     else:
         systems = set(a.systems.split(" "))
+
+    if a.no_nom is False and a.stream_json_lines:
+        parser.error("--stream-json-lines implies --no-nom")
 
     return Options(
         nix_bin=nix_bin,
@@ -540,6 +552,7 @@ async def parse_args(args: list[str]) -> Options:
         store=a.store,
         no_link=a.no_link or bool(a.store),
         out_link=a.out_link,
+        stream_json_lines=a.stream_json_lines,
         result_format=ResultFormat[a.result_format.upper()],
         result_file=a.result_file,
         override_inputs=a.override_input or [],
