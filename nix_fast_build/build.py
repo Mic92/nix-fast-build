@@ -96,10 +96,8 @@ class Build:
         await exit_stack.enter_async_context(ensure_stop(proc, cmd))
         return await proc.wait()
 
-    async def upload_cachix(
-        self, cachix_socket_path: Path | None, opts: Options
-    ) -> int:
-        if cachix_socket_path is None or not self.outputs:
+    async def upload_cachix(self, cachix_socket_path: Path, opts: Options) -> int:
+        if not self.outputs:
             return 0
         cmd = maybe_remote(
             [
