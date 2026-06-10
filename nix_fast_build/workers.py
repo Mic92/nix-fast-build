@@ -219,21 +219,17 @@ async def run_niks3_upload(
 
 
 async def report_progress(
-    build_queue: QueueWithContext,
-    upload_queue: QueueWithContext | None,
-    download_queue: QueueWithContext | None,
+    build_queue: JobQueue,
+    optional_queues: list[OptionalQueue],
 ) -> int:
     old_status = ""
+    queues = [("builds", build_queue)] + [(oq.name, oq.queue) for oq in optional_queues]
     try:
         while True:
-            builds = build_queue.qsize() + build_queue.running_tasks
-            new_status = f"builds: {builds}"
-            if upload_queue is not None:
-                uploads = upload_queue.qsize() + upload_queue.running_tasks
-                new_status += f", uploads: {uploads}"
-            if download_queue is not None:
-                downloads = download_queue.qsize() + download_queue.running_tasks
-                new_status += f", downloads: {downloads}"
+            new_status = ", ".join(
+                f"{name}: {queue.qsize() + queue.running_tasks}"
+                for name, queue in queues
+            )
             if new_status != old_status:
                 logger.info(new_status)
                 old_status = new_status
