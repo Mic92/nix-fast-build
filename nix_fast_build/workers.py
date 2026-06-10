@@ -202,7 +202,9 @@ async def run_niks3_upload(
                 opts,
             )
             logger.debug("run %s", shlex.join(cmd))
-            proc = await asyncio.create_subprocess_exec(*cmd, env=env)
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, env=env, stdout=sys.stderr.fileno()
+            )
             rc = await proc.wait()
             duration = timeit.default_timer() - start_time
 
