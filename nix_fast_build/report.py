@@ -7,7 +7,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import IO
 
-from .options import Options
 from .results import Result, ResultType
 
 logger = logging.getLogger(__name__)
@@ -174,9 +173,7 @@ def format_successful_results(
     return lines
 
 
-def write_ci_summary(
-    summary_file: Path, _opts: Options, results: list[Result], rc: int
-) -> None:
+def write_ci_summary(summary_file: Path, results: list[Result], rc: int) -> None:
     """Write CI job summary in markdown format.
 
     Supports GitHub Actions, Gitea Actions, and Forgejo Actions.

@@ -248,7 +248,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     # Write CI summary if configured (GitHub Actions, Gitea Actions, or Forgejo Actions)
     ci_summary_file = get_ci_summary_file()
     if ci_summary_file:
-        write_ci_summary(ci_summary_file, opts, results, rc)
+        write_ci_summary(ci_summary_file, results, rc)
 
     return rc
 
