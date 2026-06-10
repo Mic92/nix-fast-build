@@ -228,7 +228,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             ]
         logger.error(f"Failed attributes: {' '.join(failed_attrs)}")
     if eval_rc != 0:
-        logger.error(f"nix-eval-jobs exited with {eval_proc.returncode}")
+        logger.error(f"nix-eval-jobs exited with {eval_rc}")
         rc = 1
     if (
         output_monitor
