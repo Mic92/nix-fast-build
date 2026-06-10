@@ -123,6 +123,9 @@ class CIRenderer:
     def emit_live_line(self, build: BuildOutput, line: str) -> None:
         self._print(f"{self._prefix(build)} {line}")
 
+    def log_line(self, line: str) -> None:
+        self._print(line)
+
     # ── heartbeat / stall detection ──────────────────────────────────
 
     def start_heartbeat(self) -> None:

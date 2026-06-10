@@ -1,6 +1,9 @@
 import asyncio
 import contextlib
+import errno
 import logging
+import os
+import pty
 import shlex
 import signal
 import subprocess
@@ -8,6 +11,7 @@ import sys
 from asyncio.subprocess import Process
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import Error
@@ -62,8 +66,37 @@ async def remote_temp_dir(opts: Options) -> AsyncIterator[Path]:
         await proc.wait()
 
 
+@dataclass
+class EvalJobs:
+    proc: Process
+    stderr: asyncio.StreamReader
+
+
+async def _fd_reader(fd: int) -> asyncio.StreamReader:
+    """Wrap a raw fd (pty master) in an asyncio StreamReader."""
+    loop = asyncio.get_running_loop()
+    reader = asyncio.StreamReader()
+    await loop.connect_read_pipe(
+        lambda: asyncio.StreamReaderProtocol(reader),
+        os.fdopen(fd, "rb", 0),
+    )
+    return reader
+
+
+async def read_eval_stderr_lines(reader: asyncio.StreamReader) -> AsyncIterator[bytes]:
+    """Lines from eval stderr; a pty master raises EIO at EOF."""
+    try:
+        async for line in reader:
+            yield line
+    except OSError as e:
+        if e.errno != errno.EIO:
+            raise
+
+
 @asynccontextmanager
-async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
+async def nix_eval_jobs(
+    tmp_dir: Path, opts: Options, *, color_tty: bool
+) -> AsyncIterator[EvalJobs]:
     args = [
         "--gc-roots-dir",
         str(tmp_dir / "gcroots"),
@@ -111,14 +144,32 @@ async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
         args = [*opts.nix_eval_jobs_bin, *args]
     args = maybe_remote(args, opts)
     logger.info("run %s", shlex.join(args))
+    # Captured and routed through the renderer: eval warnings written
+    # directly to the terminal would corrupt the TTY display region.
+    # With an interactive renderer the capture is a pty, not a pipe:
+    # mainline nix decides color purely by isatty (no CLICOLOR_FORCE
+    # support, unlike Lix), and we don't want to lose eval warning color.
+    master: int | None = None
+    if color_tty:
+        master, slave = pty.openpty()
+        stderr_target: int = slave
+    else:
+        stderr_target = subprocess.PIPE
     proc = await asyncio.create_subprocess_exec(
         *args,
         stdout=subprocess.PIPE,
+        stderr=stderr_target,
         # 10MB buffer to accommodate for large lines
         limit=10485760,
     )
+    if master is not None:
+        os.close(slave)
+        stderr_reader = await _fd_reader(master)
+    else:
+        assert proc.stderr is not None
+        stderr_reader = proc.stderr
     async with ensure_stop(proc, args) as proc:
-        yield proc
+        yield EvalJobs(proc, stderr_reader)
 
 
 @asynccontextmanager

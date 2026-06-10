@@ -81,3 +81,11 @@ class Renderer(Protocol):
     def finish_build(self, build: BuildOutput, rc: int) -> None: ...
 
     def abort_build(self, build: BuildOutput) -> None: ...
+
+    def log_line(self, line: str) -> None:
+        """Print one non-build line (e.g. nix-eval-jobs stderr).
+
+        Subprocess output must go through the renderer: anything written
+        to stderr behind the TTY display's back lands inside the
+        ephemeral region and corrupts it.
+        """

@@ -16,6 +16,7 @@ from .errors import Error
 from .options import EvalMode, Options, ResultFormat, parse_args
 from .processes import (
     nix_eval_jobs,
+    read_eval_stderr_lines,
     remote_temp_dir,
     run_cachix_daemon,
 )
@@ -27,7 +28,7 @@ from .report import (
 )
 from .results import Result, ResultType, Summary
 from .sources import upload_sources
-from .term import fold_markers, want_color
+from .term import fold_markers, sanitize_line, want_color
 from .tty_renderer import TTYRenderer
 from .workers import (
     report_progress,
@@ -88,8 +89,21 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     else:
         tmp_dir = Path(stack.enter_context(TemporaryDirectory()))
 
-    eval_proc = await stack.enter_async_context(nix_eval_jobs(tmp_dir, opts))
+    # Renderer first: from here on all terminal output (including log
+    # records and eval stderr) must go through it.
     renderer = start_renderer(stack, opts)
+    eval_jobs = await stack.enter_async_context(
+        nix_eval_jobs(tmp_dir, opts, color_tty=isinstance(renderer, TTYRenderer))
+    )
+    eval_proc = eval_jobs.proc
+
+    async def forward_eval_stderr() -> None:
+        """Route nix-eval-jobs stderr (eval warnings/errors) through the
+        renderer; written directly it would corrupt the TTY region."""
+        async for raw in read_eval_stderr_lines(eval_jobs.stderr):
+            line = sanitize_line(raw.decode(errors="replace").rstrip("\r\n"))
+            if line:
+                renderer.log_line(line)
 
     cachix_socket_path: Path | None = None
     if opts.cachix_cache:
@@ -165,6 +179,8 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         tasks: list[asyncio.Task[object]] = []
         dequeue_task = tg.create_task(dequeue_results(), name="dequeue-results")
         tasks.append(dequeue_task)
+        # Ends on its own at eval stderr EOF (process exit).
+        tasks.append(tg.create_task(forward_eval_stderr(), name="eval-stderr"))
         evaluation = tg.create_task(
             run_evaluation(eval_proc, build_queue, upload_queue, result_queue, opts)
         )

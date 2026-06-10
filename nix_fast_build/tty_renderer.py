@@ -217,6 +217,9 @@ class TTYRenderer:
     def emit_live_line(self, build: BuildOutput, line: str) -> None:
         """Host protocol; TTY mode never streams (rows are already live)."""
 
+    def log_line(self, line: str) -> None:
+        self.display.permanent(line)
+
     # ── lifecycle ────────────────────────────────────────────────────
 
     def start(self) -> None:
