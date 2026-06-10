@@ -112,27 +112,6 @@ class Options:
         return name
 
 
-class ResultType(enum.Enum):
-    EVAL = enum.auto()
-    BUILD = enum.auto()
-    UPLOAD = enum.auto()
-    DOWNLOAD = enum.auto()
-    CACHIX = enum.auto()
-    ATTIC = enum.auto()
-    NIKS3 = enum.auto()
-
-
-@dataclass
-class Result:
-    result_type: ResultType
-    attr: str
-    success: bool
-    duration: float
-    error: str | None
-    log_output: str | None = None
-    outputs: dict[str, str] | None = None
-
-
 def _maybe_remote(
     cmd: list[str], remote: str | None, remote_ssh_options: list[str]
 ) -> list[str]:
