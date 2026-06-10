@@ -7,8 +7,8 @@ import sys
 import timeit
 from asyncio import Queue
 from asyncio.subprocess import Process
+from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
-from pathlib import Path
 from typing import IO, Any
 
 from .build import Build, Job, QueueWithContext, StopTask
@@ -129,74 +129,28 @@ async def run_builds(
                 queue.put_nowait(build)
 
 
-async def run_uploads(
-    stack: AsyncExitStack,
-    upload_queue: QueueWithContext[Build | StopTask],
+async def run_queue_worker(
+    queue: QueueWithContext[Build | StopTask],
     results: list[Result],
-    opts: Options,
+    result_type: ResultType,
+    label: str,
+    push: Callable[[Build], Awaitable[int]],
 ) -> int:
+    """Apply push to each queued build, recording one Result per build."""
     while True:
-        async with upload_queue.get_context() as build:
+        async with queue.get_context() as build:
             if isinstance(build, StopTask):
-                logger.debug("finish upload task")
+                logger.debug("finish %s task", label)
                 return 0
             start_time = timeit.default_timer()
-            rc = await build.upload(stack, opts)
+            rc = await push(build)
             results.append(
                 Result(
-                    result_type=ResultType.UPLOAD,
+                    result_type=result_type,
                     attr=build.attr,
                     success=rc == 0,
                     duration=timeit.default_timer() - start_time,
-                    # TODO: add log output here
-                    error=f"upload exited with {rc}" if rc != 0 else None,
-                )
-            )
-
-
-async def run_cachix_upload(
-    cachix_queue: QueueWithContext[Build | StopTask],
-    cachix_socket_path: Path,
-    results: list[Result],
-    opts: Options,
-) -> int:
-    while True:
-        async with cachix_queue.get_context() as build:
-            if isinstance(build, StopTask):
-                logger.debug("finish cachix upload task")
-                return 0
-            start_time = timeit.default_timer()
-            rc = await build.upload_cachix(cachix_socket_path, opts)
-            results.append(
-                Result(
-                    result_type=ResultType.CACHIX,
-                    attr=build.attr,
-                    success=rc == 0,
-                    duration=timeit.default_timer() - start_time,
-                    error=f"cachix upload exited with {rc}" if rc != 0 else None,
-                )
-            )
-
-
-async def run_attic_upload(
-    attic_queue: QueueWithContext[Build | StopTask],
-    results: list[Result],
-    opts: Options,
-) -> int:
-    while True:
-        async with attic_queue.get_context() as build:
-            if isinstance(build, StopTask):
-                logger.debug("finish attic upload task")
-                return 0
-            start_time = timeit.default_timer()
-            rc = await build.upload_attic(opts)
-            results.append(
-                Result(
-                    result_type=ResultType.ATTIC,
-                    attr=build.attr,
-                    success=rc == 0,
-                    duration=timeit.default_timer() - start_time,
-                    error=f"attic upload exited with {rc}" if rc != 0 else None,
+                    error=f"{label} exited with {rc}" if rc != 0 else None,
                 )
             )
 
@@ -260,30 +214,6 @@ async def run_niks3_upload(
                     error=f"niks3 upload exited with {rc}" if rc != 0 else None,
                 )
                 for build in builds
-            )
-
-
-async def run_downloads(
-    stack: AsyncExitStack,
-    download_queue: QueueWithContext[Build | StopTask],
-    results: list[Result],
-    opts: Options,
-) -> int:
-    while True:
-        async with download_queue.get_context() as build:
-            if isinstance(build, StopTask):
-                logger.debug("finish download task")
-                return 0
-            start_time = timeit.default_timer()
-            rc = await build.download(stack, opts)
-            results.append(
-                Result(
-                    result_type=ResultType.DOWNLOAD,
-                    attr=build.attr,
-                    success=rc == 0,
-                    duration=timeit.default_timer() - start_time,
-                    error=f"download exited with {rc}" if rc != 0 else None,
-                )
             )
 
 

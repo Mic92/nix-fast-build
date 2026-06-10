@@ -3,6 +3,7 @@ import logging
 import sys
 from asyncio import TaskGroup
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -32,13 +33,10 @@ from .results import Result, ResultType, Summary
 from .sources import upload_sources
 from .workers import (
     report_progress,
-    run_attic_upload,
     run_builds,
-    run_cachix_upload,
-    run_downloads,
     run_evaluation,
     run_niks3_upload,
-    run_uploads,
+    run_queue_worker,
 )
 
 __all__ = [
@@ -82,30 +80,55 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     # Build list of optional queues that are actually needed
     optional_queues: list[OptionalQueue] = []
 
+    def add_queue(
+        name: str,
+        result_type: ResultType,
+        push: Callable[[Build], Awaitable[int]],
+    ) -> QueueWithContext[Build | StopTask]:
+        queue: QueueWithContext[Build | StopTask] = QueueWithContext()
+        optional_queues.append(
+            OptionalQueue(
+                queue,
+                opts.max_jobs,
+                name,
+                lambda: run_queue_worker(queue, results, result_type, name, push),
+            )
+        )
+        return queue
+
     upload_queue: QueueWithContext[Build | StopTask] | None = None
     if opts.copy_to:
-        upload_queue = QueueWithContext()
-        optional_queues.append(OptionalQueue(upload_queue, opts.max_jobs, "upload"))
+        upload_queue = add_queue(
+            "upload", ResultType.UPLOAD, lambda b: b.upload(stack, opts)
+        )
 
-    cachix_queue: QueueWithContext[Build | StopTask] | None = None
-    if cachix_socket_path:
-        cachix_queue = QueueWithContext()
-        optional_queues.append(OptionalQueue(cachix_queue, opts.max_jobs, "cachix"))
+    if cachix_socket_path is not None:
+        # Local alias so mypy sees a non-None capture in the lambda.
+        socket_path = cachix_socket_path
+        add_queue(
+            "cachix", ResultType.CACHIX, lambda b: b.upload_cachix(socket_path, opts)
+        )
 
-    attic_queue: QueueWithContext[Build | StopTask] | None = None
     if opts.attic_cache:
-        attic_queue = QueueWithContext()
-        optional_queues.append(OptionalQueue(attic_queue, opts.max_jobs, "attic"))
+        add_queue("attic", ResultType.ATTIC, lambda b: b.upload_attic(opts))
 
-    niks3_queue: QueueWithContext[Build | StopTask] | None = None
     if opts.niks3_server:
-        niks3_queue = QueueWithContext()
-        optional_queues.append(OptionalQueue(niks3_queue, 1, "niks3"))
+        # Single niks3 worker since it batches uploads internally
+        niks3_queue: QueueWithContext[Build | StopTask] = QueueWithContext()
+        optional_queues.append(
+            OptionalQueue(
+                niks3_queue,
+                1,
+                "niks3",
+                lambda: run_niks3_upload(niks3_queue, results, opts),
+            )
+        )
 
     download_queue: QueueWithContext[Build | StopTask] | None = None
     if opts.remote_url and opts.download:
-        download_queue = QueueWithContext()
-        optional_queues.append(OptionalQueue(download_queue, opts.max_jobs, "download"))
+        download_queue = add_queue(
+            "download", ResultType.DOWNLOAD, lambda b: b.download(stack, opts)
+        )
 
     async with TaskGroup() as tg:
         tasks = []
@@ -122,69 +145,25 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         nom_pipe: IO[bytes] | None = pipe.write_file if pipe else None
         build_output = sys.stdout.buffer
         logger.debug("Starting %d build tasks", opts.max_jobs)
-        for i in range(opts.max_jobs):
-            tasks.append(
-                tg.create_task(
-                    run_builds(
-                        stack,
-                        build_output,
-                        build_queue,
-                        [oq.queue for oq in optional_queues],
-                        results,
-                        opts,
-                        nom_pipe=nom_pipe,
-                    ),
-                    name=f"build-{i}",
-                )
+        tasks.extend(
+            tg.create_task(
+                run_builds(
+                    stack,
+                    build_output,
+                    build_queue,
+                    [oq.queue for oq in optional_queues],
+                    results,
+                    opts,
+                    nom_pipe=nom_pipe,
+                ),
+                name=f"build-{i}",
             )
-            if upload_queue is not None:
-                tasks.append(
-                    tg.create_task(
-                        run_uploads(stack, upload_queue, results, opts),
-                        name=f"upload-{i}",
-                    )
-                )
-            if cachix_queue is not None and cachix_socket_path is not None:
-                tasks.append(
-                    tg.create_task(
-                        run_cachix_upload(
-                            cachix_queue,
-                            cachix_socket_path,
-                            results,
-                            opts,
-                        ),
-                        name=f"cachix-{i}",
-                    )
-                )
-            if attic_queue is not None:
-                tasks.append(
-                    tg.create_task(
-                        run_attic_upload(
-                            attic_queue,
-                            results,
-                            opts,
-                        ),
-                        name=f"attic-{i}",
-                    )
-                )
-            if download_queue is not None:
-                tasks.append(
-                    tg.create_task(
-                        run_downloads(stack, download_queue, results, opts),
-                        name=f"download-{i}",
-                    )
-                )
-        # Single niks3 worker since it batches uploads internally
-        if niks3_queue is not None:
-            tasks.append(
-                tg.create_task(
-                    run_niks3_upload(
-                        niks3_queue,
-                        results,
-                        opts,
-                    ),
-                    name="niks3",
-                )
+            for i in range(opts.max_jobs)
+        )
+        for oq in optional_queues:
+            tasks.extend(
+                tg.create_task(oq.make_worker(), name=f"{oq.name}-{i}")
+                for i in range(oq.worker_count)
             )
         if not opts.nom:
             logger.debug("Starting progress reporter")
@@ -225,9 +204,10 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     stats_by_type: dict[ResultType, Summary] = defaultdict(Summary)
     for r in results:
         stats = stats_by_type[r.result_type]
-        stats.successes += 1 if r.success else 0
-        stats.failures += 1 if not r.success else 0
-        if not r.success:
+        if r.success:
+            stats.successes += 1
+        else:
+            stats.failures += 1
             stats.failed_attrs.append(r.attr)
             rc = 1
     for result_type, summary in stats_by_type.items():
