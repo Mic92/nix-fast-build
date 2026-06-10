@@ -77,17 +77,6 @@ class Build:
             logger.debug(f"Failed to get build log: {e}")
         return ""
 
-    async def nix_copy(
-        self, args: list[str], exit_stack: AsyncExitStack, opts: Options
-    ) -> int:
-        cmd = maybe_remote(
-            opts.nix_command(["copy", "--log-format", "raw", *args]), opts
-        )
-        logger.debug("run %s", shlex.join(cmd))
-        proc = await asyncio.create_subprocess_exec(*cmd)
-        await exit_stack.enter_async_context(ensure_stop(proc, cmd))
-        return await proc.wait()
-
     async def upload(self, exit_stack: AsyncExitStack, opts: Options) -> int:
         if not opts.copy_to or not self.outputs:
             return 0
