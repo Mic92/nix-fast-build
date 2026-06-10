@@ -12,7 +12,7 @@ from typing import IO, TYPE_CHECKING
 if TYPE_CHECKING:
     from asyncio.subprocess import Process
 
-from .build import Build, Job, OptionalQueue, QueueWithContext, StopTask
+from .build import Build, BuildQueue, JobQueue, OptionalQueue, StopTask
 from .errors import Error
 from .options import EvalMode, Options, ResultFormat, parse_args
 from .pipe import Pipe
@@ -75,7 +75,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             run_cachix_daemon(stack, tmp_dir, opts.cachix_cache, opts)
         )
     results: list[Result] = []
-    build_queue: QueueWithContext[Job | StopTask] = QueueWithContext()
+    build_queue = JobQueue()
 
     # Build list of optional queues that are actually needed
     optional_queues: list[OptionalQueue] = []
@@ -84,8 +84,8 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         name: str,
         result_type: ResultType,
         push: Callable[[Build], Awaitable[int]],
-    ) -> QueueWithContext[Build | StopTask]:
-        queue: QueueWithContext[Build | StopTask] = QueueWithContext()
+    ) -> BuildQueue:
+        queue = BuildQueue()
         optional_queues.append(
             OptionalQueue(
                 queue,
@@ -96,7 +96,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         )
         return queue
 
-    upload_queue: QueueWithContext[Build | StopTask] | None = None
+    upload_queue: BuildQueue | None = None
     if opts.copy_to:
         upload_queue = add_queue(
             "upload", ResultType.UPLOAD, lambda b: b.upload(stack, opts)
@@ -114,7 +114,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
 
     if opts.niks3_server:
         # Single niks3 worker since it batches uploads internally
-        niks3_queue: QueueWithContext[Build | StopTask] = QueueWithContext()
+        niks3_queue = BuildQueue()
         optional_queues.append(
             OptionalQueue(
                 niks3_queue,

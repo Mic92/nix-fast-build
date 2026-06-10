@@ -5,13 +5,12 @@ import os
 import shlex
 import sys
 import timeit
-from asyncio import Queue
 from asyncio.subprocess import Process
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
 from typing import IO, Any
 
-from .build import Build, Job, QueueWithContext, StopTask
+from .build import Build, BuildQueue, Job, JobQueue, OptionalQueue, StopTask
 from .errors import Error
 from .options import Options, maybe_remote, nix_shell
 from .results import Result, ResultType
@@ -25,9 +24,9 @@ def _job_outputs(job: dict[str, Any]) -> dict[str, str]:
 
 async def run_evaluation(
     eval_proc: Process,
-    build_queue: Queue[Job | StopTask],
-    upload_queue: Queue[Build | StopTask] | None,
     result: list[Result],
+    build_queue: JobQueue,
+    upload_queue: BuildQueue | None,
     opts: Options,
 ) -> int:
     assert eval_proc.stdout
@@ -82,8 +81,8 @@ async def run_evaluation(
 async def run_builds(
     stack: AsyncExitStack,
     build_output: IO,
-    build_queue: QueueWithContext[Job | StopTask],
-    optional_queues: list[QueueWithContext[Build | StopTask]],
+    build_queue: JobQueue,
+    optional_queues: list[BuildQueue],
     results: list[Result],
     opts: Options,
     nom_pipe: IO[bytes] | None = None,
@@ -132,7 +131,7 @@ async def run_builds(
 
 
 async def run_queue_worker(
-    queue: QueueWithContext[Build | StopTask],
+    queue: BuildQueue,
     results: list[Result],
     result_type: ResultType,
     label: str,
@@ -158,7 +157,7 @@ async def run_queue_worker(
 
 
 async def run_niks3_upload(
-    niks3_queue: QueueWithContext[Build | StopTask],
+    niks3_queue: BuildQueue,
     results: list[Result],
     opts: Options,
 ) -> int:

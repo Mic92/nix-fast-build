@@ -215,7 +215,7 @@ T = TypeVar("T")
 class OptionalQueue:
     """Post-build queue with the workers that drain it, for proper shutdown."""
 
-    queue: "QueueWithContext[Build | StopTask]"
+    queue: "BuildQueue"
     worker_count: int
     name: str
     make_worker: Callable[[], Coroutine[Any, Any, int]]
@@ -303,3 +303,7 @@ class Job:
 
 class StopTask:
     pass
+
+
+JobQueue = QueueWithContext[Job | StopTask]
+BuildQueue = QueueWithContext[Build | StopTask]
