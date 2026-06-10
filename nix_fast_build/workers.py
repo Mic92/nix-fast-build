@@ -19,6 +19,10 @@ from .results import Result, ResultType
 logger = logging.getLogger(__name__)
 
 
+def _job_outputs(job: dict[str, Any]) -> dict[str, str]:
+    return {k: v for k, v in job.get("outputs", {}).items() if v is not None}
+
+
 async def run_evaluation(
     eval_proc: Process,
     build_queue: Queue[Job | StopTask],
@@ -63,8 +67,7 @@ async def run_evaluation(
         elif cache_status == "cached":
             continue
         elif cache_status == "local" and upload_queue is not None:
-            outputs = {k: v for k, v in job.get("outputs", {}).items() if v is not None}
-            upload_queue.put_nowait(Build(attr, job["drvPath"], outputs))
+            upload_queue.put_nowait(Build(attr, job["drvPath"], _job_outputs(job)))
         system = job.get("system")
         if system and system not in opts.systems:
             continue
@@ -72,8 +75,7 @@ async def run_evaluation(
         if not drv_path:
             msg = f"nix-eval-jobs did not return a drvPath: {line.decode()}"
             raise Error(msg)
-        outputs = {k: v for k, v in job.get("outputs", {}).items() if v is not None}
-        build_queue.put_nowait(Job(attr, drv_path, outputs))
+        build_queue.put_nowait(Job(attr, drv_path, _job_outputs(job)))
     return await eval_proc.wait()
 
 
