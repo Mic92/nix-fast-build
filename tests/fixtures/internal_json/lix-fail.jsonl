@@ -1,0 +1,77 @@
+these 2 paths will be fetched (6.0 MiB download, 25.0 MiB unpacked):
+  /nix/store/h0z6l2dpazrqiai1mnycrrvbafjqmpdm-lix-2.94.2
+  /nix/store/f393f0hxqmlh6i5hwkz7c3c1qqhkgpqy-lix-2.94.2-man
+copying path '/nix/store/f393f0hxqmlh6i5hwkz7c3c1qqhkgpqy-lix-2.94.2-man' from 'https://hetzner-cache.numtide.com'...
+copying path '/nix/store/h0z6l2dpazrqiai1mnycrrvbafjqmpdm-lix-2.94.2' from 'https://hetzner-cache.numtide.com'...
+warning: unknown experimental feature 'ca-derivations'
+warning: unknown experimental feature 'configurable-impure-env'
+warning: unknown experimental feature 'impure-derivations'
+warning: unknown experimental feature 'recursive-nix'
+@nix {"action":"start","id":17752014662402048,"level":6,"parent":0,"text":"querying info about missing paths","type":0}
+@nix {"action":"stop","id":17752014662402048}
+@nix {"action":"msg","level":3,"msg":"this derivation will be built:"}
+@nix {"action":"msg","level":3,"msg":"  /nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv"}
+@nix {"action":"start","id":17752014662402049,"level":0,"parent":0,"text":"","type":102}
+@nix {"action":"start","id":17752014662402050,"level":0,"parent":0,"text":"","type":104}
+@nix {"action":"start","id":17752014662402051,"level":0,"parent":0,"text":"","type":103}
+@nix {"action":"result","fields":[0,0,0,0],"id":17752014662402050,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17752014662402051,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17752014662402049,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17752014662402049,"type":106}
+@nix {"action":"result","fields":[0,1,0,0],"id":17752014662402050,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17752014662402051,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17752014662402049,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17752014662402049,"type":106}
+@nix {"action":"start","id":17752014662402052,"level":4,"parent":17752014662402049,"text":"connecting to 'ssh-ng://nix@jamie'","type":0}
+@nix {"action":"stop","id":17752014662402052}
+@nix {"action":"start","fields":["/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv","ssh-ng://nix@jamie",1,1],"id":17752014662402053,"level":3,"parent":0,"text":"building '/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv' on 'ssh-ng://nix@jamie'","type":105}
+@nix {"action":"result","fields":[0,1,1,0],"id":17752014662402050,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17752014662402051,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17752014662402049,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17752014662402049,"type":106}
+@nix {"action":"start","id":17752014662402054,"level":4,"parent":17752014662402049,"text":"waiting for the upload lock to 'ssh-ng://nix@jamie'","type":0}
+@nix {"action":"stop","id":17752014662402054}
+@nix {"action":"start","id":17752014662402055,"level":4,"parent":17752014662402049,"text":"copying dependencies to 'ssh-ng://nix@jamie'","type":0}
+@nix {"action":"start","id":17752014662402056,"level":6,"parent":17752014662402049,"text":"querying info about missing paths","type":0}
+@nix {"action":"stop","id":17752014662402056}
+@nix {"action":"start","id":17752014662402057,"level":6,"parent":17752014662402049,"text":"querying info about missing paths","type":0}
+@nix {"action":"stop","id":17752014662402057}
+@nix {"action":"stop","id":17752014662402055}
+@nix {"action":"start","id":17752014662402058,"level":0,"parent":17752014662402049,"text":"","type":102}
+@nix {"action":"start","id":17752014662402059,"level":0,"parent":17752014662402049,"text":"","type":104}
+@nix {"action":"start","id":17752014662402060,"level":0,"parent":17752014662402049,"text":"","type":103}
+@nix {"action":"result","fields":[0,0,0,0],"id":17752014662402059,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17752014662402060,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17752014662402058,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17752014662402058,"type":106}
+@nix {"action":"start","id":17752014662402061,"level":6,"parent":17752014662402049,"text":"querying info about missing paths","type":0}
+@nix {"action":"stop","id":17752014662402061}
+@nix {"action":"result","fields":[0,1,0,0],"id":17752014662402059,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17752014662402060,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17752014662402058,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17752014662402058,"type":106}
+@nix {"action":"start","fields":["/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv","",1,1],"id":17752014662402062,"level":3,"parent":17752014662402049,"text":"building '/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv'","type":105}
+@nix {"action":"result","fields":[0,1,1,0],"id":17752014662402059,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17752014662402060,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17752014662402058,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17752014662402058,"type":106}
+@nix {"action":"result","fields":["starting"],"id":17752014662402062,"type":101}
+@nix {"action":"result","fields":["some error detail"],"id":17752014662402062,"type":101}
+@nix {"action":"result","fields":[0,1,0,1],"id":17752014662402059,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17752014662402060,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17752014662402058,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17752014662402058,"type":106}
+@nix {"action":"stop","id":17752014662402062}
+@nix {"action":"stop","id":17752014662402060}
+@nix {"action":"stop","id":17752014662402059}
+@nix {"action":"stop","id":17752014662402058}
+@nix {"action":"msg","level":0,"msg":"\u001b[31;1merror:\u001b[0m build of '\u001b[35;1m/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv\u001b[0m' on '\u001b[35;1mssh-ng://nix@jamie\u001b[0m' failed: \u001b[35;1m\u001b[0mCannot build '\u001b[35;1m/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv\u001b[0m'.\n       Reason: \u001b[31;1mbuilder failed with exit code 1\u001b[0m.\n       Output paths:\n         \u001b[35;1m/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail\u001b[0m\n       Last 2 log lines:\n       > starting\n       > some error detail\n       For full logs, run:\n         \u001b[1mnix log /nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv\u001b[0m\u001b[0m"}
+@nix {"action":"result","fields":[0,1,0,1],"id":17752014662402050,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17752014662402051,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17752014662402049,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17752014662402049,"type":106}
+@nix {"action":"stop","id":17752014662402053}
+@nix {"action":"stop","id":17752014662402051}
+@nix {"action":"stop","id":17752014662402050}
+@nix {"action":"stop","id":17752014662402049}
+@nix {"action":"msg","column":null,"file":null,"level":0,"line":null,"msg":"\u001b[31;1merror:\u001b[0m \u001b[35;1mCannot build '\u001b[35;1m/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv\u001b[0m'.\n       Reason: \u001b[31;1mbuilder failed with exit code 1\u001b[0m.\n       Output paths:\n         \u001b[35;1m/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail\u001b[0m\u001b[0m","raw_msg":"\u001b[35;1mCannot build '\u001b[35;1m/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv\u001b[0m'.\nReason: \u001b[31;1mbuilder failed with exit code 1\u001b[0m.\nOutput paths:\n  \u001b[35;1m/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail\u001b[0m\u001b[0m"}
