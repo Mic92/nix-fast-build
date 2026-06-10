@@ -45,6 +45,9 @@ class BuildOutput:
     lines: deque[str]
     phase: str | None = None
     streaming: bool = False
+    # Total lines ever added; differs from len(lines) once the ring
+    # buffer rotates. Lets followers track progress without indexing.
+    total_lines: int = 0
 
     def on_event(self, event: LogEvent) -> None:
         match event:
@@ -62,6 +65,7 @@ class BuildOutput:
     def _add_line(self, line: str) -> None:
         self.last_output_at = self.renderer.clock()
         self.lines.append(line)
+        self.total_lines += 1
         if self.streaming:
             self.renderer.emit_live_line(self, line)
 

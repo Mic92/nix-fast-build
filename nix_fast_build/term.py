@@ -2,6 +2,7 @@
 
 import os
 import re
+import unicodedata
 
 # ANSI escape sequences: CSI, OSC (incl. unterminated), other ESC forms.
 ANSI_RE = re.compile(
@@ -61,6 +62,46 @@ def sanitize_line(s: str) -> str:
     if kept_sgr:
         s += SGR_RESET
     return s
+
+
+def char_width(ch: str) -> int:
+    """Display cells of one char: CJK/emoji are 2, combining marks 0."""
+    if unicodedata.combining(ch):
+        return 0
+    return 2 if unicodedata.east_asian_width(ch) in "WF" else 1
+
+
+def clip_ansi(s: str, width: int) -> str:
+    """Clip to display cells, passing ANSI sequences through unbroken."""
+    out: list[str] = []
+    cells = 0
+    i = 0
+    while i < len(s):
+        m = ANSI_RE.match(s, i)
+        if m:
+            out.append(m.group(0))
+            i = m.end()
+            continue
+        w = char_width(s[i])
+        if cells + w > width:
+            break
+        out.append(s[i])
+        cells += w
+        i += 1
+    return "".join(out)
+
+
+def subseq_match(query: str, candidate: str) -> bool:
+    """fzf-style subsequence match, case-insensitive."""
+    it = iter(candidate.lower())
+    return all(ch in it for ch in query.lower())
+
+
+def trunc_middle(s: str, n: int) -> str:
+    if len(s) <= n:
+        return s
+    half = (n - 1) // 2
+    return s[:half] + "…" + s[-(n - 1 - half) :]
 
 
 def want_color(isatty: bool) -> bool:

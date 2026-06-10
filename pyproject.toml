@@ -71,6 +71,8 @@ pythonpath = [ "." ]
 target-version = "py311"
 line-length = 88
 lint.select = ["ALL"]
+# White-box tests may exercise private helpers directly.
+lint.per-file-ignores."tests/*" = ["SLF001"]
 lint.ignore = [
   # pydocstyle
   "D",
