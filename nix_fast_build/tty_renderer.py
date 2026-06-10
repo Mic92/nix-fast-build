@@ -175,6 +175,8 @@ class TTYRenderer:
         self.new_builds: set[BuildOutput] = set()
         self.cursor = 0
         self.last_viewed: BuildOutput | None = None
+        self.all_done = False  # builds finished, only the browser keeps us up
+        self._idle = asyncio.Event()
         self.flash_text = ""
         self.flash_until = 0.0
 
@@ -236,6 +238,23 @@ class TTYRenderer:
         root.handlers = [DisplayLogHandler(self.display)]
         self._render_task = asyncio.create_task(self._render_loop(), name="tty-render")
 
+    def _engaged(self) -> bool:
+        return self.mode is Mode.LIST or self.pager_active or bool(self.bg_tasks)
+
+    def _signal_if_idle(self) -> None:
+        """Called at every disengage point (browser exit, pager close)."""
+        if self.all_done and not self._engaged():
+            self._idle.set()
+
+    async def wait_until_idle(self) -> None:
+        """Builds are done: if the user is in the log browser or a pager,
+        keep the UI alive until they leave instead of yanking it away."""
+        if not self._engaged():
+            return
+        self.all_done = True
+        self.flash("builds finished — leave browser ([q/Esc]) to exit")
+        await self._idle.wait()
+
     async def stop(self) -> None:
         if self._stopping:
             return
@@ -292,10 +311,11 @@ class TTYRenderer:
 
     def header(self) -> str:
         elapsed = fmt_duration(self.clock() - self.started_at)
+        done = f" · {BOLD}finished{RESET}" if self.all_done else ""
         return (
             f" {BOLD}BUILD{RESET} {GREEN}✔{len(self.succeeded)}{RESET} "
             f"{RED}✘{len(self.failed)}{RESET} ⏵{len(self.running)}"
-            f"   {elapsed}"
+            f"   {elapsed}{done}"
         )
 
     def render_normal(self) -> list[str]:
@@ -588,6 +608,7 @@ class TTYRenderer:
             self.mode = Mode.NORMAL
             self.filter = ""
             self.filter_input = False
+            self._signal_if_idle()
         elif key == "/":
             self.filter_input = True
         elif key == "d":
@@ -642,7 +663,12 @@ class TTYRenderer:
         self.pager_active = True
         task = asyncio.create_task(self._page_log(b, state, running))
         self.bg_tasks.add(task)
-        task.add_done_callback(self.bg_tasks.discard)
+
+        def on_done(t: asyncio.Task[None]) -> None:
+            self.bg_tasks.discard(t)
+            self._signal_if_idle()
+
+        task.add_done_callback(on_done)
 
     def on_stdin_readable(self) -> None:
         # Drain everything available: sys.stdin.read(1) would buffer pasted

@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 import os
@@ -316,3 +317,23 @@ def test_render_list_adapts_to_terminal_height(
     assert len(lines) <= 10 - 1
     # Paging still covers all entries.
     assert r._pages() * r._page_size() >= 10
+
+
+def test_wait_until_idle() -> None:
+    async def scenario() -> None:
+        r, _out, _clock = make_renderer()
+        # Not engaged: returns immediately.
+        await asyncio.wait_for(r.wait_until_idle(), timeout=1)
+        assert not r.all_done
+        # Browser open: waits until the user leaves.
+        fail_n(r, 1)
+        r.on_key("f")
+        waiter = asyncio.create_task(r.wait_until_idle())
+        await asyncio.sleep(0.05)
+        assert not waiter.done()
+        assert r.all_done
+        assert "finished" in "".join(r.render_list())
+        r.on_key("q")
+        await asyncio.wait_for(waiter, timeout=1)
+
+    asyncio.run(scenario())

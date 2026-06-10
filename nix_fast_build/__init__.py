@@ -245,6 +245,9 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     # heartbeat doesn't clobber it. Idempotent; the stack callbacks handle
     # exceptional paths.
     if isinstance(renderer, TTYRenderer):
+        # Don't yank the UI away while the user is reading logs in the
+        # browser or a pager; wait until they leave.
+        await renderer.wait_until_idle()
         await renderer.stop()
     else:
         await renderer.stop_heartbeat()
