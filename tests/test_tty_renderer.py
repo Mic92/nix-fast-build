@@ -105,8 +105,8 @@ def test_lifecycle_and_failure_extract() -> None:
     assert r.failed == [bad]
     assert not r.running
     text = ANSI.sub("", out.getvalue())
-    assert "✔  good  1m05s" in text
-    assert "✘  bad  1m05s  rc=1" in text
+    assert "✔ good  1m05s" in text
+    assert "✘ bad  1m05s  rc=1" in text
     # Extract: last 5 lines only.
     assert "bad> l5" in text
     assert "bad> l4" not in text
