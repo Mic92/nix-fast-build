@@ -564,7 +564,7 @@ async def parse_args(args: list[str]) -> Options:
         out_link=a.out_link,
         result_format=ResultFormat[a.result_format.upper()],
         result_file=a.result_file,
-        override_inputs=a.override_input,
+        override_inputs=a.override_input or [],
         select_expr=a.select,
         reference_lock_file=a.reference_lock_file,
         fail_fast=a.fail_fast,
