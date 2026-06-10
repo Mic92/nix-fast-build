@@ -10,13 +10,12 @@ from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Any, TypeVar
+from typing import Any, TypeVar
 
-from .ci_renderer import CIRenderer
 from .log_format import LogParser
 from .options import Options, maybe_remote, nix_shell
 from .processes import ensure_stop
-from .renderer import BuildOutput
+from .renderer import BuildOutput, Renderer
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +38,7 @@ class Build:
         self,
         stack: AsyncExitStack,
         opts: Options,
-        nom_pipe: IO[bytes] | None = None,
-        renderer: CIRenderer | None = None,
+        renderer: Renderer | None = None,
     ) -> BuildResult:
         """Build and return BuildResult."""
         rc = 0
@@ -50,9 +48,7 @@ class Build:
                 sink = renderer.start_build(self.attr, self.drv_path)
             try:
                 proc = await stack.enter_async_context(
-                    nix_build(
-                        self.attr, self.drv_path, opts, nom_pipe=nom_pipe, sink=sink
-                    )
+                    nix_build(self.attr, self.drv_path, opts, sink=sink)
                 )
                 rc = await proc.wait()
             except BaseException:
@@ -263,13 +259,11 @@ async def nix_build(
     attr: str,
     installable: str,
     opts: Options,
-    nom_pipe: IO[bytes] | None = None,
     sink: BuildOutput | None = None,
 ) -> AsyncIterator[Process]:
     args = opts.nix_command(
         ["build", f"{installable}^*", "--keep-going", *opts.options, *opts.store_args]
     )
-    # Both consumers (nom or our own renderer) parse internal-json.
     args += ["--log-format", "internal-json", "-v"]
     if opts.no_link:
         args += ["--no-link"]
@@ -282,8 +276,8 @@ async def nix_build(
     args = maybe_remote(args, opts)
     logger.debug("run %s", shlex.join(args))
 
-    # Capture stderr per-process: complete lines go to nom or to our own
-    # renderer, so concurrent builds never interleave mid-line.
+    # Capture stderr per-process: complete lines go to the renderer's
+    # per-build sink, so concurrent builds never interleave mid-line.
     proc = await asyncio.create_subprocess_exec(
         *args,
         stderr=asyncio.subprocess.PIPE,
@@ -296,10 +290,7 @@ async def nix_build(
         parser = LogParser()
         try:
             async for line in proc.stderr:
-                if nom_pipe is not None:
-                    nom_pipe.write(line)
-                    nom_pipe.flush()
-                elif sink is not None:
+                if sink is not None:
                     event = parser.parse_line(line)
                     if event is not None:
                         sink.on_event(event)
@@ -307,9 +298,6 @@ async def nix_build(
             # Line exceeded the stream limit. Stop forwarding but don't
             # let the exception escape the cleanup that awaits this task.
             logger.warning("build %s: log line exceeded buffer limit, dropped", attr)
-        except OSError as e:
-            # E.g. nom pipe already closed during shutdown.
-            logger.debug("build %s: stopped forwarding log: %s", attr, e)
 
     fwd_task = asyncio.create_task(_forward_lines())
     try:

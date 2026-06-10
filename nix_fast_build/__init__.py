@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import sys
 from asyncio import Queue, TaskGroup
 from collections import defaultdict
@@ -8,22 +9,15 @@ from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import IO, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from asyncio.subprocess import Process
 
 from .build import Build, BuildQueue, JobQueue, OptionalQueue, StopTask
 from .ci_renderer import CIRenderer
 from .errors import Error
 from .options import EvalMode, Options, ResultFormat, parse_args
-from .pipe import Pipe
 from .processes import (
     nix_eval_jobs,
-    nix_output_monitor,
     remote_temp_dir,
     run_cachix_daemon,
-    stop_nom,
 )
 from .report import (
     dump_json,
@@ -34,6 +28,7 @@ from .report import (
 from .results import Result, ResultType, Summary
 from .sources import upload_sources
 from .term import fold_markers, want_color
+from .tty_renderer import TTYRenderer
 from .workers import (
     report_progress,
     run_builds,
@@ -59,6 +54,34 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
+def start_renderer(stack: AsyncExitStack, opts: Options) -> CIRenderer | TTYRenderer:
+    """Pick and start the build log renderer.
+
+    Teardown is registered on the exit stack so the render/heartbeat task
+    doesn't leak when the build TaskGroup raises; the normal path stops
+    the renderer explicitly before the summary (stop is idempotent).
+    """
+    if (
+        opts.interactive
+        and sys.stderr.isatty()
+        and sys.stdin.isatty()
+        and os.environ.get("TERM", "") not in ("", "dumb")
+    ):
+        tty_renderer = TTYRenderer(sys.stderr)
+        tty_renderer.start()
+        stack.push_async_callback(tty_renderer.stop)
+        return tty_renderer
+    ci_renderer = CIRenderer(
+        sys.stderr,
+        color=want_color(sys.stderr.isatty()),
+        fold=fold_markers() and not opts.no_fold,
+        stall_timeout=opts.stall_timeout,
+    )
+    ci_renderer.start_heartbeat()
+    stack.push_async_callback(ci_renderer.stop_heartbeat)
+    return ci_renderer
+
+
 async def run(stack: AsyncExitStack, opts: Options) -> int:
     if opts.remote:
         tmp_dir = await stack.enter_async_context(remote_temp_dir(opts))
@@ -66,19 +89,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         tmp_dir = Path(stack.enter_context(TemporaryDirectory()))
 
     eval_proc = await stack.enter_async_context(nix_eval_jobs(tmp_dir, opts))
-    pipe: Pipe | None = None
-    output_monitor: Process | None = None
-    renderer: CIRenderer | None = None
-    if opts.nom:
-        pipe = stack.enter_context(Pipe())
-        output_monitor = await stack.enter_async_context(nix_output_monitor(pipe, opts))
-    else:
-        renderer = CIRenderer(
-            sys.stderr,
-            color=want_color(sys.stderr.isatty()),
-            fold=fold_markers() and not opts.no_fold,
-            stall_timeout=opts.stall_timeout,
-        )
+    renderer = start_renderer(stack, opts)
 
     cachix_socket_path: Path | None = None
     if opts.cachix_cache:
@@ -158,15 +169,6 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             run_evaluation(eval_proc, build_queue, upload_queue, result_queue, opts)
         )
         tasks.append(evaluation)
-        # Each nix-build captures its own stderr; complete lines go to the
-        # shared nom pipe or to our own renderer, so concurrent builds
-        # never interleave mid-line.
-        nom_pipe: IO[bytes] | None = pipe.write_file if pipe else None
-        if renderer is not None:
-            renderer.start_heartbeat()
-            # Stop via the exit stack so the task doesn't leak (and warn
-            # at shutdown) when the TaskGroup below raises.
-            stack.push_async_callback(renderer.stop_heartbeat)
         logger.debug("Starting %d build tasks", opts.max_jobs)
         tasks.extend(
             tg.create_task(
@@ -176,7 +178,6 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                     [oq.queue for oq in optional_queues],
                     result_queue,
                     opts,
-                    nom_pipe=nom_pipe,
                     renderer=renderer,
                 ),
                 name=f"build-{i}",
@@ -189,7 +190,9 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                 for i in range(oq.worker_count)
             )
         progress_task = None
-        if not opts.nom:
+        if isinstance(renderer, CIRenderer):
+            # Queue backlog reporter; the TTY renderer shows liveness
+            # itself, and logger output would corrupt its region.
             logger.debug("Starting progress reporter")
             progress_task = tg.create_task(
                 report_progress(build_queue, optional_queues),
@@ -222,12 +225,12 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         for task in tasks:
             assert task.done(), f"Task {task.get_name()} is not done"
 
-    # Stop nom before logging the summary so its final redraw doesn't clobber
-    # the output; the teardown in the stack is a no-op afterwards.
-    if pipe is not None and output_monitor is not None:
-        await stop_nom(output_monitor, pipe)
-    if renderer is not None:
-        # Idempotent; the stack callback handles exceptional paths.
+    # Stop the renderer before logging the summary so the TTY region or a
+    # heartbeat doesn't clobber it. Idempotent; the stack callbacks handle
+    # exceptional paths.
+    if isinstance(renderer, TTYRenderer):
+        await renderer.stop()
+    else:
         await renderer.stop_heartbeat()
 
     rc = 0
@@ -260,14 +263,6 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     if eval_rc != 0:
         logger.error(f"nix-eval-jobs exited with {eval_rc}")
         rc = 1
-    if (
-        output_monitor
-        and output_monitor.returncode != 0
-        and output_monitor.returncode is not None
-    ):
-        logger.error(f"nix-output-monitor exited with {output_monitor.returncode}")
-        rc = 1
-
     if opts.result_file:
         with opts.result_file.open("w") as f:
             if opts.result_format == ResultFormat.JSON:

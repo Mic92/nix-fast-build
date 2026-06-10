@@ -12,6 +12,7 @@ screen), so output stays in scrollback and Ctrl-C keeps working.
 
 import asyncio
 import contextlib
+import logging
 import os
 import shlex
 import shutil
@@ -23,7 +24,7 @@ import time
 import tty
 from collections import deque
 from collections.abc import Callable
-from enum import Enum
+from enum import Enum, auto
 from pathlib import Path
 from typing import IO, Any
 
@@ -45,9 +46,25 @@ SHOW_CURSOR = f"{CSI}?25h"
 EXTRACT_LINES = 5  # failure extract printed to scrollback
 
 
+class DisplayLogHandler(logging.Handler):
+    """Routes log records through the display.
+
+    Anything written to stderr behind the display's back lands inside the
+    ephemeral region and breaks its cursor-up anchor, leaving stale rows.
+    """
+
+    def __init__(self, display: "Display") -> None:
+        super().__init__()
+        self.display = display
+        self.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.display.permanent(*self.format(record).splitlines())
+
+
 class Mode(Enum):
-    NORMAL = "normal"
-    LIST = "list"
+    NORMAL = auto()
+    LIST = auto()
 
 
 class Display:
@@ -124,7 +141,7 @@ class Display:
 
 
 class TTYRenderer:
-    PAGE = 6  # browser rows per page (each row is 2 lines: status + log gist)
+    PAGE = 6  # max browser rows per page (each row is 2 lines)
     BUFFER_LINES = 10_000
 
     def __init__(
@@ -134,13 +151,12 @@ class TTYRenderer:
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.display = Display(out)
-        self.out = out
         self.clock = clock
         self.started_at = clock()
         self.mode = Mode.NORMAL
         self.running: list[BuildOutput] = []  # insertion order = start order
         self.failed: list[BuildOutput] = []
-        self.done = 0
+        self.succeeded: set[BuildOutput] = set()
         self.spin = 0
         self.dump_action = False  # False = pager, True = dump to scrollback
         self.page = 0
@@ -151,6 +167,8 @@ class TTYRenderer:
         self.cooked_termios: list[Any] = []
         self.bg_tasks: set[asyncio.Task[None]] = set()
         self._render_task: asyncio.Task[None] | None = None
+        self._saved_handlers: list[logging.Handler] | None = None
+        self._stopping = False
         # LIST mode state: order pinned on entry so rows don't shift under
         # the user's finger; later arrivals are appended and tagged "new".
         self.pinned: list[BuildOutput] = []
@@ -181,7 +199,7 @@ class TTYRenderer:
         stamp = f"{DIM}{time.strftime('%H:%M:%S')}{RESET}"
         duration = fmt_duration(build.elapsed())
         if rc == 0:
-            self.done += 1
+            self.succeeded.add(build)
             self.display.permanent(f"{stamp} {GREEN}✔ {build.attr}{RESET}  {duration}")
             return
         self.failed.append(build)
@@ -208,27 +226,42 @@ class TTYRenderer:
         tty.setcbreak(fd)
         loop.add_reader(fd, self.on_stdin_readable)
         # Hide the cursor: it strobes across the region during redraws.
-        self.out.write(HIDE_CURSOR)
-        self.out.flush()
+        self._write_ctl(HIDE_CURSOR)
         loop.add_signal_handler(signal.SIGWINCH, self._on_winch)
+        root = logging.getLogger()
+        self._saved_handlers = root.handlers[:]
+        root.handlers = [DisplayLogHandler(self.display)]
         self._render_task = asyncio.create_task(self._render_loop(), name="tty-render")
 
     async def stop(self) -> None:
+        if self._stopping:
+            return
+        # Also keeps a cancelled pager's cleanup from re-attaching the
+        # key reader and cbreak mode behind our back.
+        self._stopping = True
         loop = asyncio.get_running_loop()
         fd = sys.stdin.fileno()
+        # Detach input first: a keystroke arriving while we await the
+        # cancellations below could spawn a fresh pager task.
+        with contextlib.suppress(ValueError, OSError):
+            loop.remove_reader(fd)
+            loop.remove_signal_handler(signal.SIGWINCH)
         tasks = [t for t in (self._render_task, *self.bg_tasks) if t is not None]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         self._render_task = None
-        with contextlib.suppress(ValueError, OSError):
-            loop.remove_reader(fd)
-            loop.remove_signal_handler(signal.SIGWINCH)
         if self.cooked_termios:
             termios.tcsetattr(fd, termios.TCSADRAIN, self.cooked_termios)
+        if self._saved_handlers is not None:
+            logging.getLogger().handlers = self._saved_handlers
+            self._saved_handlers = None
         self.display.ephemeral([])
-        self.out.write(SHOW_CURSOR)
-        self.out.flush()
+        self._write_ctl(SHOW_CURSOR)
+
+    def _write_ctl(self, seq: str) -> None:
+        self.display.out.write(seq)
+        self.display.out.flush()
 
     def _on_winch(self) -> None:
         # Terminal resized: old region may have rewrapped, making the
@@ -257,7 +290,7 @@ class TTYRenderer:
     def header(self) -> str:
         elapsed = fmt_duration(self.clock() - self.started_at)
         return (
-            f" {BOLD}BUILD{RESET} {GREEN}✔{self.done}{RESET} "
+            f" {BOLD}BUILD{RESET} {GREEN}✔{len(self.succeeded)}{RESET} "
             f"{RED}✘{len(self.failed)}{RESET} ⏵{len(self.running)}"
             f"   {elapsed}"
         )
@@ -265,7 +298,18 @@ class TTYRenderer:
     def render_normal(self) -> list[str]:
         lines = [self.header()]
         spin = SPINNER[self.spin % len(SPINNER)]
-        for b in self._running_sorted():
+        # A region taller than the terminal breaks the cursor-up anchor
+        # (the cursor can't move above the top), so clamp the build rows.
+        # Reserve 3 lines: header, footer, and one against off-by-one
+        # terminal quirks.
+        budget = max(2, shutil.get_terminal_size().lines - 3)
+        running = self._running_sorted()
+        for shown, b in enumerate(running):
+            rows = 2 if b.lines else 1
+            if budget - rows < (1 if shown < len(running) - 1 else 0):
+                lines.append(f"     {DIM}… +{len(running) - shown} more{RESET}")
+                break
+            budget -= rows
             phase = b.phase or "build"
             lines.append(
                 f" {YELLOW}{spin}{RESET} {trunc_middle(b.attr, 40):<40} "
@@ -308,12 +352,18 @@ class TTYRenderer:
             return self.pinned
         return [b for b in self.pinned if subseq_match(self.filter, b.attr)]
 
+    def _page_size(self) -> int:
+        # Adapt to terminal height like render_normal: header, separator
+        # and footer need 4 lines, each row takes 2.
+        return max(1, min(self.PAGE, (shutil.get_terminal_size().lines - 4) // 2))
+
     def _pages(self) -> int:
-        return max(1, -(-len(self._filtered()) // self.PAGE))
+        return max(1, -(-len(self._filtered()) // self._page_size()))
 
     def _page_slice(self) -> list[BuildOutput]:
+        size = self._page_size()
         self.page = min(self.page, self._pages() - 1)
-        return self._filtered()[self.page * self.PAGE : (self.page + 1) * self.PAGE]
+        return self._filtered()[self.page * size : (self.page + 1) * size]
 
     def flash(self, msg: str) -> None:
         self.flash_text = msg
@@ -327,6 +377,8 @@ class TTYRenderer:
     def _status_label(self, b: BuildOutput) -> str:
         if b in self.running:
             return f"{YELLOW}⏵ {b.phase or 'build'}{RESET}"
+        if b in self.succeeded:
+            return f"{GREEN}✔ done{RESET}"
         return f"{RED}✘ failed{RESET}"
 
     def _action_label(self, b: BuildOutput | None) -> str:
@@ -340,7 +392,7 @@ class TTYRenderer:
         filtered = self._filtered()
         self.cursor = max(0, min(self.cursor, len(filtered) - 1))
         if filtered:
-            self.page = self.cursor // self.PAGE
+            self.page = self.cursor // self._page_size()
         pages = self._pages()
         page_info = f" page {self.page + 1}/{pages}" if pages > 1 else ""
         match_info = (
@@ -352,7 +404,7 @@ class TTYRenderer:
         ]
         visible = self._page_slice()
         for i, b in enumerate(visible, 1):
-            selected = self.page * self.PAGE + i - 1 == self.cursor
+            selected = self.page * self._page_size() + i - 1 == self.cursor
             marker = f"{BOLD}▸{RESET}" if selected else " "
             new = f" {YELLOW}new{RESET}" if b in self.new_builds else ""
             lines.append(
@@ -410,20 +462,24 @@ class TTYRenderer:
             pager.append("+F" if running else "+G")
         return pager
 
-    async def _page_log(self, b: BuildOutput, state: str, running: bool) -> None:
+    @staticmethod
+    def _write_log_tmpfile(b: BuildOutput, state: str) -> Path:
         with tempfile.NamedTemporaryFile(
             "w", suffix=f"-{b.attr.replace('/', '_')}.log", delete=False
         ) as tf:
             tf.write(f"# log: {b.attr} ({state}, {fmt_duration(b.elapsed())})\n")
             tf.writelines(f"{b.attr}> {line}\n" for line in b.lines)
-            path = Path(tf.name)
+            return Path(tf.name)
+
+    async def _page_log(self, b: BuildOutput, state: str, running: bool) -> None:
+        path = self._write_log_tmpfile(b, state)
         written = b.total_lines
 
         # For running builds, keep appending new log lines so `less +F`
         # follows live output. total_lines (not indexing) because the
         # ring buffer may rotate while we follow. The file is opened here
         # in sync context; writes are small appends to a local tmpfile.
-        follow_file = path.open("a") if running else None  # noqa: ASYNC230 small local tmpfile
+        follow_file = path.open("a") if running else None
 
         async def follow(f: IO[str]) -> None:
             nonlocal written
@@ -457,16 +513,23 @@ class TTYRenderer:
         # abort all builds behind its back.
         loop.add_signal_handler(signal.SIGINT, lambda: None)
         termios.tcsetattr(fd, termios.TCSADRAIN, self.cooked_termios)
-        self.out.write(SHOW_CURSOR)  # pager expects a visible cursor
-        self.out.flush()
+        self._write_ctl(SHOW_CURSOR)  # pager expects a visible cursor
+        proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 *self._pager_cmd(b, state, running), path, env=env
             )
             await proc.wait()
         finally:
-            self.out.write(HIDE_CURSOR)
-            self.out.flush()
+            if proc is not None and proc.returncode is None:
+                # Cancelled (shutdown) while the pager was open: don't
+                # leave an orphaned less owning the terminal. The await
+                # may itself be cancelled again; less got SIGTERM either
+                # way and the process is reaped at loop shutdown.
+                proc.terminate()
+                with contextlib.suppress(asyncio.CancelledError, TimeoutError):
+                    await asyncio.wait_for(proc.wait(), timeout=2)
+            self._write_ctl(HIDE_CURSOR)
             loop.remove_signal_handler(signal.SIGINT)
             signal.signal(signal.SIGINT, signal.default_int_handler)
             if follower is not None:
@@ -474,9 +537,10 @@ class TTYRenderer:
                 await asyncio.gather(follower, return_exceptions=True)
             if follow_file is not None:
                 follow_file.close()
-            tty.setcbreak(fd)
-            loop.add_reader(fd, self.on_stdin_readable)
-            path.unlink()  # noqa: ASYNC240 small local tmpfile
+            if not self._stopping:
+                tty.setcbreak(fd)
+                loop.add_reader(fd, self.on_stdin_readable)
+            path.unlink()
             self.pager_active = False
             missed = self.display.resume()
             if missed:
@@ -556,7 +620,7 @@ class TTYRenderer:
         target = self.page + delta
         if 0 <= target < self._pages():
             self.page = target
-            self.cursor = target * self.PAGE
+            self.cursor = target * self._page_size()
         else:
             self.flash("already at last page" if delta > 0 else "already at first page")
 

@@ -12,7 +12,6 @@ from pathlib import Path
 
 from .errors import Error
 from .options import EvalMode, Options, maybe_remote, nix_shell
-from .pipe import Pipe
 
 logger = logging.getLogger(__name__)
 
@@ -120,37 +119,6 @@ async def nix_eval_jobs(tmp_dir: Path, opts: Options) -> AsyncIterator[Process]:
     )
     async with ensure_stop(proc, args) as proc:
         yield proc
-
-
-@asynccontextmanager
-async def nix_output_monitor(pipe: Pipe, opts: Options) -> AsyncIterator[Process]:
-    cmd = maybe_remote(
-        [*nix_shell("nixpkgs#nix-output-monitor", "nom"), "--json"],
-        opts,
-    )
-    proc = await asyncio.create_subprocess_exec(*cmd, stdin=pipe.read_file)
-    try:
-        yield proc
-    finally:
-        await stop_nom(proc, pipe)
-
-
-async def stop_nom(proc: Process, pipe: Pipe) -> None:
-    """Stop nom and restore the terminal. Safe to call multiple times."""
-    try:
-        # Closing the write end sends EOF, letting nom exit cleanly.
-        pipe.write_file.close()
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=10)
-        except TimeoutError:
-            with contextlib.suppress(ProcessLookupError):
-                proc.kill()
-            await proc.wait()
-        pipe.read_file.close()
-    finally:
-        # nom doesn't restore terminal settings on exit: re-enable the
-        # cursor and autowrap (disabled autowrap clips long lines).
-        print("\033[?25h\033[?7h", end="", flush=True)
 
 
 @asynccontextmanager

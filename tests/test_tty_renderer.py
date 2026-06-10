@@ -1,9 +1,20 @@
 import io
+import logging
+import os
 import re
 
+import pytest
+
+from nix_fast_build import tty_renderer
 from nix_fast_build.log_format import BuildLogLine
 from nix_fast_build.renderer import BuildOutput
-from nix_fast_build.tty_renderer import CSI, Display, Mode, TTYRenderer
+from nix_fast_build.tty_renderer import (
+    CSI,
+    Display,
+    DisplayLogHandler,
+    Mode,
+    TTYRenderer,
+)
 
 DRV = "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-x.drv"
 ANSI = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
@@ -89,7 +100,7 @@ def test_lifecycle_and_failure_extract() -> None:
     clock.now += 65
     r.finish_build(good, 0)
     r.finish_build(bad, 1)
-    assert r.done == 1
+    assert r.succeeded == {good}
     assert r.failed == [bad]
     assert not r.running
     text = ANSI.sub("", out.getvalue())
@@ -249,3 +260,59 @@ def test_unknown_key_flashes() -> None:
     r.on_key("f")
     r.on_key("z")
     assert "unknown key" in r.flash_text
+
+
+def test_display_log_handler() -> None:
+    out = io.StringIO()
+    d = Display(out)
+    d.ephemeral(["status"])
+    h = DisplayLogHandler(d)
+    logger = logging.getLogger("nfb-test")
+    logger.addHandler(h)
+    logger.warning("multi\nline")
+    logger.removeHandler(h)
+    text = out.getvalue()
+    assert "WARNING:nfb-test:multi" in text
+    assert d.ephemeral_lines == 1  # region repainted after the log lines
+
+
+def test_browser_succeeded_label() -> None:
+    r, _out, _clock = make_renderer()
+    fail_n(r, 1)
+    b = r.start_build("slow", DRV)
+    r.on_key("f")  # pins failed + running
+    r.finish_build(b, 0)  # succeeds while browser open
+    text = plain(r.render_list())
+    assert "✔ done" in text
+    assert text.count("✘ failed") == 1
+
+
+def test_render_normal_clamps_to_terminal_height(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+
+    r, _out, _clock = make_renderer()
+    for i in range(30):
+        b = r.start_build(f"pkg-{i:02d}", DRV)
+        feed(b, "output")
+    monkeypatch.setattr(
+        tty_renderer.shutil, "get_terminal_size", lambda: os.terminal_size((80, 24))
+    )
+    lines = r.render_normal()
+    assert len(lines) <= 24 - 1
+    assert any("more" in line for line in lines)
+
+
+def test_render_list_adapts_to_terminal_height(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r, _out, _clock = make_renderer()
+    fail_n(r, 10)
+    r.on_key("f")
+    monkeypatch.setattr(
+        tty_renderer.shutil, "get_terminal_size", lambda: os.terminal_size((80, 10))
+    )
+    lines = r.render_list()
+    assert len(lines) <= 10 - 1
+    # Paging still covers all entries.
+    assert r._pages() * r._page_size() >= 10

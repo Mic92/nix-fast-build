@@ -34,14 +34,7 @@
             ...
           }:
           {
-            packages.nix-fast-build = pkgs.callPackage ./default.nix {
-              # we don't want to compile ghc otherwise
-              nix-output-monitor =
-                if lib.elem pkgs.stdenv.hostPlatform.system officialPlatforms then
-                  pkgs.nix-output-monitor
-                else
-                  null;
-            };
+            packages.nix-fast-build = pkgs.callPackage ./default.nix { };
             legacyPackages = {
               hello-broken = pkgs.hello.overrideAttrs (_old: {
                 meta.broken = true;
