@@ -122,6 +122,32 @@ def test_abort_is_silent() -> None:
     assert not r.running
 
 
+def test_render_summary_counts_and_elapsed() -> None:
+    r, _out, clock = make_renderer()
+    good = r.start_build("good", DRV)
+    bad = r.start_build("bad", DRV)
+    aborted = r.start_build("aborted", DRV)
+    clock.now += 65
+    r.finish_build(good, 0)
+    r.finish_build(bad, 1)
+    r.abort_build(aborted)
+    text = ANSI.sub("", r.render_summary())
+    assert "✔ 1 succeeded" in text
+    assert "✘ 1 failed" in text
+    assert "⏹ 1 aborted" in text
+    assert "1m05s" in text
+
+
+def test_render_summary_omits_zero_counts() -> None:
+    r, _out, _clock = make_renderer()
+    good = r.start_build("good", DRV)
+    r.finish_build(good, 0)
+    text = ANSI.sub("", r.render_summary())
+    assert "✔ 1 succeeded" in text
+    assert "failed" not in text
+    assert "aborted" not in text
+
+
 def test_render_normal_rows() -> None:
     r, _out, clock = make_renderer()
     a = r.start_build("pkgs.alpha", DRV)

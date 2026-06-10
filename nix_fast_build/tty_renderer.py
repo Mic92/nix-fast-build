@@ -159,6 +159,7 @@ class TTYRenderer:
         self.mode = Mode.NORMAL
         self.running: list[BuildOutput] = []  # insertion order = start order
         self.failed: list[BuildOutput] = []
+        self.aborted = 0
         self.succeeded: set[BuildOutput] = set()
         self.spin = 0
         self.dump_action = False  # False = pager, True = dump to scrollback
@@ -218,6 +219,7 @@ class TTYRenderer:
     def abort_build(self, build: BuildOutput) -> None:
         with contextlib.suppress(ValueError):
             self.running.remove(build)
+            self.aborted += 1
 
     def emit_live_line(self, build: BuildOutput, line: str) -> None:
         """Host protocol; TTY mode never streams (rows are already live)."""
@@ -282,6 +284,8 @@ class TTYRenderer:
             logging.getLogger().handlers = self._saved_handlers
             self._saved_handlers = None
         self.display.ephemeral([])
+        # Live region is gone; leave a permanent recap in scrollback.
+        self.display.permanent(self.render_summary())
         self._write_ctl(SHOW_CURSOR)
 
     def _write_ctl(self, seq: str) -> None:
@@ -307,6 +311,15 @@ class TTYRenderer:
             await asyncio.sleep(0.25)
 
     # ── rendering ────────────────────────────────────────────────────
+
+    def render_summary(self) -> str:
+        parts = [f"{GREEN}✔ {len(self.succeeded)} succeeded{RESET}"]
+        if self.failed:
+            parts.append(f"{RED}✘ {len(self.failed)} failed{RESET}")
+        if self.aborted:
+            parts.append(f"{YELLOW}⏹ {self.aborted} aborted{RESET}")
+        elapsed = fmt_duration(self.clock() - self.started_at)
+        return f"{BOLD}summary:{RESET} {' · '.join(parts)} · {elapsed}"
 
     def _running_sorted(self) -> list[BuildOutput]:
         """Longest-elapsed first; ties keep start order (no jitter)."""
