@@ -11,29 +11,28 @@ from .options import Options
 logger = logging.getLogger(__name__)
 
 
-def nix_flake_metadata(opts: Options) -> dict[str, Any]:
-    cmd = opts.nix_command(
-        [
-            "flake",
-            "metadata",
-            "--json",
-            opts.flake_url,
-        ]
-    )
-    logger.info(f"run {shlex.join(cmd)}")
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
+def _run(cmd: list[str], env: dict[str, str] | None = None) -> bytes:
+    logger.info("run %s", shlex.join(cmd))
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, env=env, check=False)
     if proc.returncode != 0:
         msg = (
             f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
         )
         raise Error(msg)
+    return proc.stdout
 
+
+def _run_json(cmd: list[str]) -> Any:
+    stdout = _run(cmd)
     try:
-        data = json.loads(proc.stdout)
-    except (json.JSONDecodeError, OSError) as e:
-        msg = f"failed to parse output of {shlex.join(cmd)}: {e}\nGot: {proc.stdout.decode('utf-8', 'replace')}"
+        return json.loads(stdout)
+    except json.JSONDecodeError as e:
+        msg = f"failed to parse output of {shlex.join(cmd)}: {e}\nGot: {stdout.decode('utf-8', 'replace')}"
         raise Error(msg) from e
-    return data
+
+
+def nix_flake_metadata(opts: Options) -> dict[str, Any]:
+    return _run_json(opts.nix_command(["flake", "metadata", "--json", opts.flake_url]))
 
 
 def is_path_input(node: dict[str, dict[str, str]]) -> bool:
@@ -62,43 +61,19 @@ def upload_sources(opts: Options) -> str:
             env = os.environ.copy()
             env["NIX_SSHOPTS"] = " ".join(opts.remote_ssh_options)
             assert opts.remote_url
-            cmd = opts.nix_command(
-                [
-                    "copy",
-                    "--to",
-                    opts.remote_url,
-                    "--no-check-sigs",
-                    path,
-                ]
+            _run(
+                opts.nix_command(
+                    ["copy", "--to", opts.remote_url, "--no-check-sigs", path]
+                ),
+                env=env,
             )
-            proc = subprocess.run(cmd, stdout=subprocess.PIPE, env=env, check=False)
-            if proc.returncode != 0:
-                msg = f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
-                raise Error(msg)
             return path
 
     # Slow path: we need to upload all sources to the remote machine
     assert opts.remote_url
-    cmd = opts.nix_command(
-        [
-            "flake",
-            "archive",
-            "--to",
-            opts.remote_url,
-            "--json",
-            opts.flake_url,
-        ]
-    )
-    print("run " + shlex.join(cmd))
-    logger.info("run %s", shlex.join(cmd))
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, check=False)
-    if proc.returncode != 0:
-        msg = (
-            f"failed to upload sources: {shlex.join(cmd)} failed with {proc.returncode}"
+    data = _run_json(
+        opts.nix_command(
+            ["flake", "archive", "--to", opts.remote_url, "--json", opts.flake_url]
         )
-        raise Error(msg)
-    try:
-        return json.loads(proc.stdout)["path"]
-    except (json.JSONDecodeError, OSError) as e:
-        msg = f"failed to parse output of {shlex.join(cmd)}: {e}\nGot: {proc.stdout.decode('utf-8', 'replace')}"
-        raise Error(msg) from e
+    )
+    return data["path"]
