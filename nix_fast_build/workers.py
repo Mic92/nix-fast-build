@@ -24,9 +24,9 @@ def _job_outputs(job: dict[str, Any]) -> dict[str, str]:
 
 async def run_evaluation(
     eval_proc: Process,
-    result: list[Result],
     build_queue: JobQueue,
     upload_queue: BuildQueue | None,
+    results: list[Result],
     opts: Options,
 ) -> int:
     assert eval_proc.stdout
@@ -43,7 +43,7 @@ async def run_evaluation(
             raise Error(msg) from e
         error = job.get("error")
         attr = job.get("attr", "unknown-attribute")
-        result.append(
+        results.append(
             Result(
                 result_type=ResultType.EVAL,
                 attr=attr,
