@@ -114,17 +114,28 @@ Unlike `--remote` (which runs the whole pipeline over SSH), `--store` uses the
 Nix store protocol only. It implies `--no-link` since outputs stay in the remote
 store. It cannot be combined with `--remote`, `--copy-to`, or upload flags.
 
-## CI-Friendly Output
+## Build Output
 
-By default, `Nix-output-monitor` (abbreviated as `nom`) updates its output every
-0.5 seconds. In standard terminal environments, this frequent update is
-unnoticeable, as `nom` erases the previous output before displaying the new one.
-However, in Continuous Integration (CI) systems, each update appears as a
-separate line of output.
+nix-fast-build renders build logs itself by parsing nix's internal-json log
+stream (compatible with both Nix and Lix); it no longer depends on
+nix-output-monitor.
 
-To make output more concise for CI environments, use the `--no-nom` flag. This
-replaces `nom` with a streamlined status reporter, which updates only when
-there's a change in the number of pending builds, uploads, or downloads.
+On a terminal, an interactive view shows running builds in a region at the
+bottom while verdicts and failure extracts scroll into normal scrollback. Press
+`f` to browse the logs of failed and running builds: `j`/`k`/`Enter` or digits
+select, `/` filters, `d` toggles between opening logs in `$PAGER` and dumping
+them to scrollback. Running builds are followed live via `less +F`.
+
+Without a terminal (CI), each build's log is emitted as one contiguous block
+when it finishes, so concurrent builds never interleave. On GitHub/Forgejo/Gitea
+Actions, successful build logs are folded with `::group::` markers (disable with
+`--no-fold`); failed builds are never folded. A heartbeat lists running builds
+every 30 seconds, and a build that produces no output for `--stall-timeout`
+seconds (default 300) has its last lines dumped and is switched to live
+streaming.
+
+The `--no-nom` flag (named for the days when it disabled nix-output-monitor)
+forces the non-interactive renderer on a terminal.
 
 ## CI Job Summaries
 
@@ -377,8 +388,14 @@ options:
   --niks3-server NIKS3_SERVER
                         Niks3 server URL to upload to (auth from
                         ~/.config/niks3/auth-token or NIKS3_AUTH_TOKEN_FILE)
-  --no-nom              Don't use nix-output-monitor to print build output
-                        (default: false)
+  --no-nom              Use the non-interactive log renderer even on a
+                        terminal (historical name: it used to disable nix-
+                        output-monitor)
+  --no-fold             Don't emit ::group:: fold markers around successful
+                        build logs on Actions-style CI (default: false)
+  --stall-timeout STALL_TIMEOUT
+                        Seconds without build output before dumping its last
+                        lines and streaming it live (default: 300)
   --systems SYSTEMS     Space-separated list of systems to build for (default:
                         current system)
   --retries RETRIES     Number of times to retry failed builds

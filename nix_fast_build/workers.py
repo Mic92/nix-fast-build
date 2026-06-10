@@ -9,11 +9,12 @@ from asyncio import Queue
 from asyncio.subprocess import Process
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
-from typing import IO, Any
+from typing import Any
 
 from .build import Build, BuildQueue, Job, JobQueue, OptionalQueue, StopTask
 from .errors import Error
 from .options import Options, maybe_remote, nix_shell
+from .renderer import Renderer
 from .results import Result, ResultType
 
 logger = logging.getLogger(__name__)
@@ -81,12 +82,11 @@ async def run_evaluation(
 
 async def run_builds(
     stack: AsyncExitStack,
-    build_output: IO,
     build_queue: JobQueue,
     optional_queues: list[BuildQueue],
     result_queue: "Queue[Result | None]",
     opts: Options,
-    nom_pipe: IO[bytes] | None = None,
+    renderer: Renderer | None = None,
 ) -> int:
     drv_paths: set[Any] = set()
 
@@ -99,16 +99,12 @@ async def run_builds(
                 logger.debug("fail-fast: skipping build of %s", next_job.attr)
                 continue
             job = next_job
-            print(f"  building {job.attr}", file=sys.stderr)
-            sys.stderr.flush()
             if job.drv_path in drv_paths:
                 continue
             drv_paths.add(job.drv_path)
             build = Build(job.attr, job.drv_path, job.outputs)
             start_time = timeit.default_timer()
-            build_result = await build.build(
-                stack, build_output, opts, nom_pipe=nom_pipe
-            )
+            build_result = await build.build(stack, opts, renderer=renderer)
             await result_queue.put(
                 Result(
                     result_type=ResultType.BUILD,

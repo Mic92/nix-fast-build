@@ -1,0 +1,153 @@
+@nix {"action":"msg","level":4,"msg":"evaluating file '«nix-internal»/derivation-internal.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/tmp/sample.nix'"}
+@nix {"action":"start","id":17748638818107392,"level":6,"parent":0,"text":"querying info about missing paths","type":0}
+@nix {"action":"stop","id":17748638818107392}
+@nix {"action":"msg","level":3,"msg":"this derivation will be built:"}
+@nix {"action":"msg","level":3,"msg":"  /nix/store/6imbvk9xj3nyz42wgkdw38b1mpgrasy4-nfb-sample.drv"}
+@nix {"action":"start","id":17748638818107393,"level":0,"parent":0,"text":"","type":102}
+@nix {"action":"start","id":17748638818107394,"level":0,"parent":0,"text":"","type":104}
+@nix {"action":"start","id":17748638818107395,"level":0,"parent":0,"text":"","type":103}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107394,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107395,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17748638818107393,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17748638818107393,"type":106}
+@nix {"action":"result","fields":[0,1,0,0],"id":17748638818107394,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107395,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17748638818107393,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17748638818107393,"type":106}
+@nix {"action":"start","id":17748638818107396,"level":4,"parent":17748638818107393,"text":"connecting to 'ssh-ng://nix@jamie'","type":0}
+@nix {"action":"stop","id":17748638818107396}
+@nix {"action":"start","fields":["/nix/store/6imbvk9xj3nyz42wgkdw38b1mpgrasy4-nfb-sample.drv","ssh-ng://nix@jamie",1,1],"id":17748638818107397,"level":3,"parent":0,"text":"building '/nix/store/6imbvk9xj3nyz42wgkdw38b1mpgrasy4-nfb-sample.drv' on 'ssh-ng://nix@jamie'","type":105}
+@nix {"action":"result","fields":[0,1,1,0],"id":17748638818107394,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107395,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17748638818107393,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17748638818107393,"type":106}
+@nix {"action":"start","id":17748638818107398,"level":4,"parent":17748638818107393,"text":"waiting for the upload lock to 'ssh-ng://nix@jamie'","type":0}
+@nix {"action":"stop","id":17748638818107398}
+@nix {"action":"start","id":17748638818107399,"level":4,"parent":17748638818107393,"text":"copying dependencies to 'ssh-ng://nix@jamie'","type":0}
+@nix {"action":"start","id":17748638818107400,"level":6,"parent":17748638818107393,"text":"querying info about missing paths","type":0}
+@nix {"action":"stop","id":17748638818107400}
+@nix {"action":"start","id":17748638818107401,"level":6,"parent":17748638818107393,"text":"querying info about missing paths","type":0}
+@nix {"action":"stop","id":17748638818107401}
+@nix {"action":"stop","id":17748638818107399}
+@nix {"action":"start","id":17748638818107402,"level":0,"parent":17748638818107393,"text":"","type":102}
+@nix {"action":"start","id":17748638818107403,"level":0,"parent":17748638818107393,"text":"","type":104}
+@nix {"action":"start","id":17748638818107404,"level":0,"parent":17748638818107393,"text":"","type":103}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107403,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107404,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17748638818107402,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17748638818107402,"type":106}
+@nix {"action":"start","id":17748638818107405,"level":6,"parent":17748638818107393,"text":"querying info about missing paths","type":0}
+@nix {"action":"stop","id":17748638818107405}
+@nix {"action":"result","fields":[0,1,0,0],"id":17748638818107403,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107404,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17748638818107402,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17748638818107402,"type":106}
+@nix {"action":"start","fields":["/nix/store/bcwnpq654b9mxh1sk0gabxbqa7823ai1-nfb-sample","https://cache.dos.cit.tum.de"],"id":17748638818107406,"level":4,"parent":17748638818107393,"text":"querying info about '/nix/store/bcwnpq654b9mxh1sk0gabxbqa7823ai1-nfb-sample' on 'https://cache.dos.cit.tum.de'","type":109}
+@nix {"action":"start","fields":["https://cache.dos.cit.tum.de/bcwnpq654b9mxh1sk0gabxbqa7823ai1.narinfo"],"id":17748638818107407,"level":4,"parent":17748638818107393,"text":"downloading 'https://cache.dos.cit.tum.de/bcwnpq654b9mxh1sk0gabxbqa7823ai1.narinfo'","type":101}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[243,243,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[243,243,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[243,243,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"result","fields":[243,243,0,0],"id":17748638818107407,"type":105}
+@nix {"action":"stop","id":17748638818107406}
+@nix {"action":"stop","id":17748638818107407}
+@nix {"action":"start","fields":["/nix/store/bcwnpq654b9mxh1sk0gabxbqa7823ai1-nfb-sample","https://cache.nixos.org"],"id":17748638818107408,"level":4,"parent":17748638818107393,"text":"querying info about '/nix/store/bcwnpq654b9mxh1sk0gabxbqa7823ai1-nfb-sample' on 'https://cache.nixos.org'","type":109}
+@nix {"action":"start","fields":["https://cache.nixos.org/bcwnpq654b9mxh1sk0gabxbqa7823ai1.narinfo"],"id":17748638818107409,"level":4,"parent":17748638818107393,"text":"downloading 'https://cache.nixos.org/bcwnpq654b9mxh1sk0gabxbqa7823ai1.narinfo'","type":101}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17748638818107409,"type":105}
+@nix {"action":"stop","id":17748638818107408}
+@nix {"action":"stop","id":17748638818107409}
+@nix {"action":"start","fields":["/nix/store/bcwnpq654b9mxh1sk0gabxbqa7823ai1-nfb-sample","https://nix-community.cachix.org"],"id":17748638818107410,"level":4,"parent":17748638818107393,"text":"querying info about '/nix/store/bcwnpq654b9mxh1sk0gabxbqa7823ai1-nfb-sample' on 'https://nix-community.cachix.org'","type":109}
+@nix {"action":"start","fields":["https://nix-community.cachix.org/bcwnpq654b9mxh1sk0gabxbqa7823ai1.narinfo"],"id":17748638818107411,"level":4,"parent":17748638818107393,"text":"downloading 'https://nix-community.cachix.org/bcwnpq654b9mxh1sk0gabxbqa7823ai1.narinfo'","type":101}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[15,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[15,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[15,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"result","fields":[15,0,0,0],"id":17748638818107411,"type":105}
+@nix {"action":"stop","id":17748638818107410}
+@nix {"action":"stop","id":17748638818107411}
+@nix {"action":"start","fields":["/nix/store/6imbvk9xj3nyz42wgkdw38b1mpgrasy4-nfb-sample.drv","",1,1],"id":17748638818107412,"level":3,"parent":17748638818107393,"text":"building '/nix/store/6imbvk9xj3nyz42wgkdw38b1mpgrasy4-nfb-sample.drv'","type":105}
+@nix {"action":"result","fields":[0,1,1,0],"id":17748638818107403,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107404,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17748638818107402,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17748638818107402,"type":106}
+@nix {"action":"result","fields":["hello-line-1"],"id":17748638818107412,"type":101}
+@nix {"action":"result","fields":["phase output"],"id":17748638818107412,"type":101}
+@nix {"action":"result","fields":["ünïcode 漢字"],"id":17748638818107412,"type":101}
+@nix {"action":"result","fields":["sh: mkdir: not found"],"id":17748638818107412,"type":101}
+@nix {"action":"result","fields":[0,1,0,1],"id":17748638818107403,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107404,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17748638818107402,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17748638818107402,"type":106}
+@nix {"action":"stop","id":17748638818107412}
+@nix {"action":"stop","id":17748638818107404}
+@nix {"action":"stop","id":17748638818107403}
+@nix {"action":"stop","id":17748638818107402}
+@nix {"action":"msg","level":0,"msg":"\u001b[31;1merror:\u001b[0m build of '\u001b[35;1m/nix/store/6imbvk9xj3nyz42wgkdw38b1mpgrasy4-nfb-sample.drv\u001b[0m' on '\u001b[35;1mssh-ng://nix@jamie\u001b[0m' failed: \u001b[35;1m\u001b[0mCannot build '\u001b[35;1m/nix/store/6imbvk9xj3nyz42wgkdw38b1mpgrasy4-nfb-sample.drv\u001b[0m'.\n       Reason: \u001b[31;1mbuilder failed with exit code 127\u001b[0m.\n       Output paths:\n         \u001b[35;1m/nix/store/bcwnpq654b9mxh1sk0gabxbqa7823ai1-nfb-sample\u001b[0m\n       Last 4 log lines:\n       > hello-line-1\n       > phase output\n       > ünïcode 漢字\n       > sh: mkdir: not found\n       For full logs, run:\n         \u001b[1mnix log /nix/store/6imbvk9xj3nyz42wgkdw38b1mpgrasy4-nfb-sample.drv\u001b[0m\u001b[0m"}
+@nix {"action":"result","fields":[0,1,0,1],"id":17748638818107394,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17748638818107395,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17748638818107393,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17748638818107393,"type":106}
+@nix {"action":"stop","id":17748638818107397}
+@nix {"action":"stop","id":17748638818107395}
+@nix {"action":"stop","id":17748638818107394}
+@nix {"action":"stop","id":17748638818107393}
+@nix {"action":"msg","column":null,"file":null,"level":0,"line":null,"msg":"\u001b[31;1merror:\u001b[0m Cannot build '\u001b[35;1m/nix/store/6imbvk9xj3nyz42wgkdw38b1mpgrasy4-nfb-sample.drv\u001b[0m'.\n       Reason: \u001b[31;1mbuilder failed with exit code 1\u001b[0m.\n       Output paths:\n         \u001b[35;1m/nix/store/bcwnpq654b9mxh1sk0gabxbqa7823ai1-nfb-sample\u001b[0m","raw_msg":"Cannot build '\u001b[35;1m/nix/store/6imbvk9xj3nyz42wgkdw38b1mpgrasy4-nfb-sample.drv\u001b[0m'.\nReason: \u001b[31;1mbuilder failed with exit code 1\u001b[0m.\nOutput paths:\n  \u001b[35;1m/nix/store/bcwnpq654b9mxh1sk0gabxbqa7823ai1-nfb-sample\u001b[0m"}

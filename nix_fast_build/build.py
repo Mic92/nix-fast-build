@@ -10,10 +10,12 @@ from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Any, TypeVar
+from typing import Any, TypeVar
 
+from .log_format import LogParser
 from .options import Options, maybe_remote, nix_shell
 from .processes import ensure_stop
+from .renderer import BuildOutput, Renderer
 
 logger = logging.getLogger(__name__)
 
@@ -35,19 +37,27 @@ class Build:
     async def build(
         self,
         stack: AsyncExitStack,
-        build_output: IO[bytes],
         opts: Options,
-        nom_pipe: IO[bytes] | None = None,
+        renderer: Renderer | None = None,
     ) -> BuildResult:
         """Build and return BuildResult."""
         rc = 0
+        sink: BuildOutput | None = None
         for attempt in range(opts.retries + 1):
-            proc = await stack.enter_async_context(
-                nix_build(
-                    self.attr, self.drv_path, build_output, opts, nom_pipe=nom_pipe
+            if renderer is not None:
+                sink = renderer.start_build(self.attr, self.drv_path)
+            try:
+                proc = await stack.enter_async_context(
+                    nix_build(self.attr, self.drv_path, opts, sink=sink)
                 )
-            )
-            rc = await proc.wait()
+                rc = await proc.wait()
+            except BaseException:
+                # Cancellation/shutdown: drop silently, no verdict.
+                if renderer is not None and sink is not None:
+                    renderer.abort_build(sink)
+                raise
+            if renderer is not None and sink is not None:
+                renderer.finish_build(sink, rc)
             if rc == 0:
                 logger.debug(f"build {self.attr} succeeded")
                 return BuildResult(return_code=rc, log_output="")
@@ -56,8 +66,12 @@ class Build:
                 f"(attempt {attempt + 1}/{opts.retries + 1})"
             )
 
-        # If build failed, get the log using nix log
-        log_output = await self.get_build_log(opts)
+        # For the result file: prefer the log captured from the failed
+        # build; fall back to nix log (e.g. all lines rotated out).
+        if sink is not None and sink.lines:
+            log_output = "\n".join(sink.lines)
+        else:
+            log_output = await self.get_build_log(opts)
         return BuildResult(return_code=rc, log_output=log_output)
 
     async def get_build_log(self, opts: Options) -> str:
@@ -244,19 +258,13 @@ class QueueWithContext(Queue[T]):
 async def nix_build(
     attr: str,
     installable: str,
-    stderr: IO[Any] | None,
     opts: Options,
-    nom_pipe: IO[bytes] | None = None,
+    sink: BuildOutput | None = None,
 ) -> AsyncIterator[Process]:
     args = opts.nix_command(
         ["build", f"{installable}^*", "--keep-going", *opts.options, *opts.store_args]
     )
-    if nom_pipe is not None:
-        args += ["--log-format", "internal-json", "-v"]
-    else:
-        # Without nom, stream build logs directly to stderr so the user
-        # can see what builders are doing (especially useful in CI).
-        args += ["-L"]
+    args += ["--log-format", "internal-json", "-v"]
     if opts.no_link:
         args += ["--no-link"]
     else:
@@ -268,33 +276,36 @@ async def nix_build(
     args = maybe_remote(args, opts)
     logger.debug("run %s", shlex.join(args))
 
-    if nom_pipe is not None:
-        # Capture stderr per-process so we can forward complete lines to nom,
-        # avoiding interleaved writes from concurrent builds on the shared pipe.
-        proc = await asyncio.create_subprocess_exec(
-            *args, stderr=asyncio.subprocess.PIPE
-        )
+    # Capture stderr per-process: complete lines go to the renderer's
+    # per-build sink, so concurrent builds never interleave mid-line.
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stderr=asyncio.subprocess.PIPE,
+        # 10MB buffer to accommodate for large lines
+        limit=10485760,
+    )
 
-        async def _forward_lines() -> None:
-            assert proc.stderr is not None
+    async def _forward_lines() -> None:
+        assert proc.stderr is not None
+        parser = LogParser()
+        try:
             async for line in proc.stderr:
-                nom_pipe.write(line)
-                nom_pipe.flush()
+                if sink is not None:
+                    event = parser.parse_line(line)
+                    if event is not None:
+                        sink.on_event(event)
+        except ValueError:
+            # Line exceeded the stream limit. Stop forwarding but don't
+            # let the exception escape the cleanup that awaits this task.
+            logger.warning("build %s: log line exceeded buffer limit, dropped", attr)
 
-        fwd_task = asyncio.create_task(_forward_lines())
-        try:
-            yield proc
-        finally:
-            with contextlib.suppress(ProcessLookupError):
-                proc.kill()
-            await fwd_task
-    else:
-        proc = await asyncio.create_subprocess_exec(*args, stderr=stderr)
-        try:
-            yield proc
-        finally:
-            with contextlib.suppress(ProcessLookupError):
-                proc.kill()
+    fwd_task = asyncio.create_task(_forward_lines())
+    try:
+        yield proc
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            proc.kill()
+        await fwd_task
 
 
 @dataclass

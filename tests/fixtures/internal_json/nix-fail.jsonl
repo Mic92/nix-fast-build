@@ -1,0 +1,242 @@
+@nix {"action":"msg","level":4,"msg":"evaluating file '«nix-internal»/derivation-internal.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/tmp/fail.nix'"}
+@nix {"action":"start","id":17750270905679872,"level":6,"parent":0,"text":"querying info about missing paths","type":0}
+@nix {"action":"start","fields":["/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail","https://hetzner-cache.numtide.com"],"id":17750270905679873,"level":4,"parent":0,"text":"querying info about '/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail' on 'https://hetzner-cache.numtide.com'","type":109}
+@nix {"action":"start","fields":["https://hetzner-cache.numtide.com/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo"],"id":17750270905679874,"level":4,"parent":17750270905679873,"text":"downloading 'https://hetzner-cache.numtide.com/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo'","type":101}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17750270905679874,"type":105}
+@nix {"action":"stop","id":17750270905679873}
+@nix {"action":"stop","id":17750270905679874}
+@nix {"action":"start","fields":["/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail","https://cache.nixos.org"],"id":17750270905679875,"level":4,"parent":0,"text":"querying info about '/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail' on 'https://cache.nixos.org'","type":109}
+@nix {"action":"start","fields":["https://cache.nixos.org/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo"],"id":17750270905679876,"level":4,"parent":17750270905679875,"text":"downloading 'https://cache.nixos.org/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo'","type":101}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17750270905679876,"type":105}
+@nix {"action":"stop","id":17750270905679875}
+@nix {"action":"stop","id":17750270905679876}
+@nix {"action":"start","fields":["/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail","https://nix-community.cachix.org"],"id":17750270905679877,"level":4,"parent":0,"text":"querying info about '/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail' on 'https://nix-community.cachix.org'","type":109}
+@nix {"action":"start","fields":["https://nix-community.cachix.org/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo"],"id":17750270905679878,"level":4,"parent":17750270905679877,"text":"downloading 'https://nix-community.cachix.org/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo'","type":101}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[15,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[15,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[15,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"result","fields":[15,0,0,0],"id":17750270905679878,"type":105}
+@nix {"action":"stop","id":17750270905679877}
+@nix {"action":"stop","id":17750270905679878}
+@nix {"action":"start","fields":["/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail","https://cache.thalheim.io"],"id":17750270905679879,"level":4,"parent":0,"text":"querying info about '/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail' on 'https://cache.thalheim.io'","type":109}
+@nix {"action":"start","fields":["https://cache.thalheim.io/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo"],"id":17750270905679880,"level":4,"parent":17750270905679879,"text":"downloading 'https://cache.thalheim.io/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo'","type":101}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679880,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679880,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679880,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679880,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679880,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679880,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679880,"type":105}
+@nix {"action":"result","fields":[11,11,0,0],"id":17750270905679880,"type":105}
+@nix {"action":"result","fields":[11,11,0,0],"id":17750270905679880,"type":105}
+@nix {"action":"result","fields":[11,11,0,0],"id":17750270905679880,"type":105}
+@nix {"action":"result","fields":[11,11,0,0],"id":17750270905679880,"type":105}
+@nix {"action":"stop","id":17750270905679879}
+@nix {"action":"stop","id":17750270905679880}
+@nix {"action":"stop","id":17750270905679872}
+@nix {"action":"msg","level":3,"msg":"this derivation will be built:"}
+@nix {"action":"msg","level":3,"msg":"  /nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv"}
+@nix {"action":"start","id":17750270905679881,"level":0,"parent":0,"text":"","type":102}
+@nix {"action":"start","id":17750270905679882,"level":0,"parent":0,"text":"","type":104}
+@nix {"action":"start","id":17750270905679883,"level":0,"parent":0,"text":"","type":103}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679882,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679883,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17750270905679881,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17750270905679881,"type":106}
+@nix {"action":"result","fields":[0,1,0,0],"id":17750270905679882,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679883,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17750270905679881,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17750270905679881,"type":106}
+@nix {"action":"start","id":17750270905679884,"level":4,"parent":17750270905679881,"text":"connecting to 'ssh-ng://nix@jamie'","type":0}
+@nix {"action":"stop","id":17750270905679884}
+@nix {"action":"start","fields":["/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv","ssh-ng://nix@jamie",1,1],"id":17750270905679885,"level":3,"parent":0,"text":"building '/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv' on 'ssh-ng://nix@jamie'","type":105}
+@nix {"action":"result","fields":[0,1,1,0],"id":17750270905679882,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679883,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17750270905679881,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17750270905679881,"type":106}
+@nix {"action":"start","id":17750270905679886,"level":4,"parent":17750270905679881,"text":"waiting for the upload lock to 'ssh-ng://nix@jamie'","type":0}
+@nix {"action":"stop","id":17750270905679886}
+@nix {"action":"start","id":17750270905679887,"level":4,"parent":17750270905679881,"text":"copying dependencies to 'ssh-ng://nix@jamie'","type":0}
+@nix {"action":"start","id":17750270905679888,"level":6,"parent":17750270905679881,"text":"querying info about missing paths","type":0}
+@nix {"action":"stop","id":17750270905679888}
+@nix {"action":"start","id":17750270905679889,"level":6,"parent":17750270905679881,"text":"querying info about missing paths","type":0}
+@nix {"action":"stop","id":17750270905679889}
+@nix {"action":"stop","id":17750270905679887}
+@nix {"action":"start","id":17750270905679890,"level":0,"parent":17750270905679881,"text":"","type":102}
+@nix {"action":"start","id":17750270905679891,"level":0,"parent":17750270905679881,"text":"","type":104}
+@nix {"action":"start","id":17750270905679892,"level":0,"parent":17750270905679881,"text":"","type":103}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679891,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679892,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17750270905679890,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17750270905679890,"type":106}
+@nix {"action":"start","id":17750270905679893,"level":6,"parent":17750270905679881,"text":"querying info about missing paths","type":0}
+@nix {"action":"stop","id":17750270905679893}
+@nix {"action":"result","fields":[0,1,0,0],"id":17750270905679891,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679892,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17750270905679890,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17750270905679890,"type":106}
+@nix {"action":"start","fields":["/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail","https://cache.dos.cit.tum.de"],"id":17750270905679894,"level":4,"parent":17750270905679881,"text":"querying info about '/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail' on 'https://cache.dos.cit.tum.de'","type":109}
+@nix {"action":"start","fields":["https://cache.dos.cit.tum.de/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo"],"id":17750270905679895,"level":4,"parent":17750270905679881,"text":"downloading 'https://cache.dos.cit.tum.de/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo'","type":101}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[243,243,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[243,243,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[243,243,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"result","fields":[243,243,0,0],"id":17750270905679895,"type":105}
+@nix {"action":"stop","id":17750270905679894}
+@nix {"action":"stop","id":17750270905679895}
+@nix {"action":"start","fields":["/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail","https://cache.nixos.org"],"id":17750270905679896,"level":4,"parent":17750270905679881,"text":"querying info about '/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail' on 'https://cache.nixos.org'","type":109}
+@nix {"action":"start","fields":["https://cache.nixos.org/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo"],"id":17750270905679897,"level":4,"parent":17750270905679881,"text":"downloading 'https://cache.nixos.org/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo'","type":101}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"result","fields":[3,3,0,0],"id":17750270905679897,"type":105}
+@nix {"action":"stop","id":17750270905679896}
+@nix {"action":"stop","id":17750270905679897}
+@nix {"action":"start","fields":["/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail","https://nix-community.cachix.org"],"id":17750270905679898,"level":4,"parent":17750270905679881,"text":"querying info about '/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail' on 'https://nix-community.cachix.org'","type":109}
+@nix {"action":"start","fields":["https://nix-community.cachix.org/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo"],"id":17750270905679899,"level":4,"parent":17750270905679881,"text":"downloading 'https://nix-community.cachix.org/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6.narinfo'","type":101}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[15,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[15,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[15,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"result","fields":[15,0,0,0],"id":17750270905679899,"type":105}
+@nix {"action":"stop","id":17750270905679898}
+@nix {"action":"stop","id":17750270905679899}
+@nix {"action":"start","fields":["/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv","",1,1],"id":17750270905679900,"level":3,"parent":17750270905679881,"text":"building '/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv'","type":105}
+@nix {"action":"result","fields":[0,1,1,0],"id":17750270905679891,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679892,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17750270905679890,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17750270905679890,"type":106}
+@nix {"action":"result","fields":["starting"],"id":17750270905679900,"type":101}
+@nix {"action":"result","fields":["some error detail"],"id":17750270905679900,"type":101}
+@nix {"action":"result","fields":[0,1,0,1],"id":17750270905679891,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679892,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17750270905679890,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17750270905679890,"type":106}
+@nix {"action":"stop","id":17750270905679900}
+@nix {"action":"stop","id":17750270905679892}
+@nix {"action":"stop","id":17750270905679891}
+@nix {"action":"stop","id":17750270905679890}
+@nix {"action":"msg","level":0,"msg":"\u001b[31;1merror:\u001b[0m build of '\u001b[35;1m/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv\u001b[0m' on '\u001b[35;1mssh-ng://nix@jamie\u001b[0m' failed: \u001b[35;1m\u001b[0mCannot build '\u001b[35;1m/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv\u001b[0m'.\n       Reason: \u001b[31;1mbuilder failed with exit code 1\u001b[0m.\n       Output paths:\n         \u001b[35;1m/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail\u001b[0m\n       Last 2 log lines:\n       > starting\n       > some error detail\n       For full logs, run:\n         \u001b[1mnix log /nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv\u001b[0m\u001b[0m"}
+@nix {"action":"result","fields":[0,1,0,1],"id":17750270905679882,"type":105}
+@nix {"action":"result","fields":[0,0,0,0],"id":17750270905679883,"type":105}
+@nix {"action":"result","fields":[101,0],"id":17750270905679881,"type":106}
+@nix {"action":"result","fields":[100,0],"id":17750270905679881,"type":106}
+@nix {"action":"stop","id":17750270905679885}
+@nix {"action":"stop","id":17750270905679883}
+@nix {"action":"stop","id":17750270905679882}
+@nix {"action":"stop","id":17750270905679881}
+@nix {"action":"msg","column":null,"file":null,"level":0,"line":null,"msg":"\u001b[31;1merror:\u001b[0m Cannot build '\u001b[35;1m/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv\u001b[0m'.\n       Reason: \u001b[31;1mbuilder failed with exit code 1\u001b[0m.\n       Output paths:\n         \u001b[35;1m/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail\u001b[0m","raw_msg":"Cannot build '\u001b[35;1m/nix/store/7fl810qxj70c41adxcc7vvky0cdq6hsg-nfb-fail.drv\u001b[0m'.\nReason: \u001b[31;1mbuilder failed with exit code 1\u001b[0m.\nOutput paths:\n  \u001b[35;1m/nix/store/q8lfckrpqp7kmlffc7hbnaw8z3pnpmx6-nfb-fail\u001b[0m"}

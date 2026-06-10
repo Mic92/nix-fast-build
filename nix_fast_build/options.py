@@ -5,7 +5,6 @@ import json
 import multiprocessing
 import os
 import shlex
-import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -51,7 +50,9 @@ class Options:
     retries: int = 0
     debug: bool = False
     copy_to: str | None = None
-    nom: bool = True
+    interactive: bool = True
+    no_fold: bool = False
+    stall_timeout: float = 300.0
     download: bool = True
     no_link: bool = False
     out_link: str = "result"
@@ -284,9 +285,20 @@ async def parse_args(args: list[str]) -> Options:
     )
     parser.add_argument(
         "--no-nom",
-        help="Don't use nix-output-monitor to print build output (default: false)",
+        help="Use the non-interactive log renderer even on a terminal "
+        "(historical name: it used to disable nix-output-monitor)",
         action="store_true",
-        default=None,
+    )
+    parser.add_argument(
+        "--no-fold",
+        help="Don't emit ::group:: fold markers around successful build logs on Actions-style CI (default: false)",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--stall-timeout",
+        type=float,
+        default=300.0,
+        help="Seconds without build output before dumping its last lines and streaming it live (default: 300)",
     )
     parser.add_argument(
         "--systems",
@@ -499,19 +511,9 @@ async def parse_args(args: list[str]) -> Options:
     nix_config = await get_nix_config(nix_bin, a.remote, remote_ssh_options)
     if a.max_jobs is None:
         a.max_jobs = int(nix_config.get("max-jobs", 0))
-    if a.no_nom is None:
-        if a.stream_json_lines:
-            a.no_nom = True
-        elif a.remote:
-            # only if we have an official binary cache, otherwise we need to build ghc...
-            a.no_nom = nix_config.get("system", "") not in [
-                "aarch64-darwin",
-                "x86_64-darwin",
-                "aarch64-linux",
-                "x86_64-linux",
-            ]
-        else:
-            a.no_nom = shutil.which("nom") is None
+    # The TTY renderer additionally requires stdin/stderr to be a
+    # terminal; that check happens at startup, not here.
+    interactive = not a.no_nom and not a.stream_json_lines
     if a.systems is None:
         systems = {nix_config.get("system", "")}
     else:
@@ -534,7 +536,9 @@ async def parse_args(args: list[str]) -> Options:
         options=options,
         remote_ssh_options=remote_ssh_options,
         max_jobs=a.max_jobs,
-        nom=not a.no_nom,
+        interactive=interactive,
+        no_fold=a.no_fold,
+        stall_timeout=a.stall_timeout,
         download=not a.no_download,
         debug=a.debug,
         systems=systems,

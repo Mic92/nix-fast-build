@@ -2,7 +2,6 @@
   python3Packages,
   makeWrapper,
   nix-eval-jobs,
-  nix-output-monitor,
   lib,
   bashInteractive,
 }:
@@ -10,7 +9,6 @@ let
   path = lib.makeBinPath [
     nix-eval-jobs
     nix-eval-jobs.nix
-    nix-output-monitor
   ];
 in
 python3Packages.buildPythonApplication {
@@ -37,7 +35,7 @@ python3Packages.buildPythonApplication {
     export PATH=${path}:$PATH
   '';
   meta = {
-    description = "Combine the power of nix-eval-jobs with nix-output-monitor to speed-up your evaluation and building process.";
+    description = "Speed up your Nix evaluation and building process with parallel evaluation and building";
     homepage = "https://github.com/Mic92/nix-fast-build";
     license = lib.licenses.mit;
     maintainers = with lib.maintainers; [ mic92 ];
