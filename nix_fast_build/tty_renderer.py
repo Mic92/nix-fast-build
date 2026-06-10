@@ -200,12 +200,12 @@ class TTYRenderer:
         duration = fmt_duration(build.elapsed())
         if rc == 0:
             self.succeeded.add(build)
-            self.display.permanent(f"{stamp} {GREEN}✔ {build.attr}{RESET}  {duration}")
+            self.display.permanent(f"{stamp} {GREEN}✔  {build.attr}{RESET}  {duration}")
             return
         self.failed.append(build)
         tail = list(build.lines)[-EXTRACT_LINES:]
         self.display.permanent(
-            f"{stamp} {RED}✘ {build.attr}{RESET}  {duration}  rc={rc}",
+            f"{stamp} {RED}✘  {build.attr}{RESET}  {duration}  rc={rc}",
             f"{DIM}── error extract (full log: [f] or nix log {build.drv_path}) ──{RESET}",
             *(f"{DIM}{build.attr}>{RESET} {line}" for line in tail),
         )

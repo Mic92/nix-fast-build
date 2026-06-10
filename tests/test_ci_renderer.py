@@ -53,7 +53,7 @@ def test_success_block_contiguous() -> None:
     text = out.getvalue()
     # Logs of concurrent builds don't interleave.
     assert "pkg-a> a1\npkg-a> a2\n" in text
-    assert "✔ pkg-a (1m05s)" in text
+    assert "✔  pkg-a (1m05s)" in text
     assert not renderer.running
 
 
@@ -66,9 +66,9 @@ def test_success_folded_failure_not() -> None:
     feed(bad, "boom")
     renderer.finish_build(bad, 1)
     text = out.getvalue()
-    assert "::group::✔ good (0s)\ngood> fine\n::endgroup::\n" in text
+    assert "::group::✔  good (0s)\ngood> fine\n::endgroup::\n" in text
     # Failure block has no fold markers around it.
-    fail_block = text.split("✘ bad failed")[1]
+    fail_block = text.split("✘  bad failed")[1]
     assert "::group::" not in fail_block
     assert "✘ end of log for bad · nix log " + DRV in text
 
@@ -156,11 +156,11 @@ def test_stall_escalates_to_streaming() -> None:
     renderer.finish_build(b, 1)
     delta = out.getvalue()[len(before) :]
     assert "slow> t6" not in delta
-    assert "✘ slow failed" in delta
+    assert "✘  slow failed" in delta
 
 
 def test_color_applied() -> None:
     renderer, out, _clock = make_renderer(color=True)
     b = renderer.start_build("pkg", DRV)
     renderer.finish_build(b, 0)
-    assert "\x1b[32m✔ pkg" in out.getvalue()
+    assert "\x1b[32m✔  pkg" in out.getvalue()

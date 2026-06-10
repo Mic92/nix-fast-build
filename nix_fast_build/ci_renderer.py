@@ -92,8 +92,8 @@ class CIRenderer:
 
     def _verdict_line(self, build: BuildOutput, rc: int, duration: str) -> str:
         if rc == 0:
-            return self._sgr(GREEN, f"✔ {build.attr} ({duration})")
-        return self._sgr(RED, f"✘ {build.attr} failed after {duration} (rc={rc})")
+            return self._sgr(GREEN, f"✔  {build.attr} ({duration})")
+        return self._sgr(RED, f"✘  {build.attr} failed after {duration} (rc={rc})")
 
     def _emit_success(self, build: BuildOutput, duration: str) -> None:
         verdict = self._verdict_line(build, 0, duration)
