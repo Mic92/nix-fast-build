@@ -337,3 +337,25 @@ def test_wait_until_idle() -> None:
         await asyncio.wait_for(waiter, timeout=1)
 
     asyncio.run(scenario())
+
+
+def test_arrow_keys_navigate_not_escape() -> None:
+    r, _out, _clock = make_renderer()
+    fail_n(r, 3)
+    r.on_key("f")
+    # Down arrow moves the cursor; must NOT act as Esc and close the list.
+    r.feed_bytes(b"\x1b[B")
+    assert r.mode is Mode.LIST
+    assert r.cursor == 1
+    r.feed_bytes(b"\x1b[A")
+    assert r.cursor == 0
+    # Unknown CSI (e.g. Home) swallowed entirely, no Esc, no stray keys.
+    r.feed_bytes(b"\x1b[1~")
+    assert r.mode is Mode.LIST
+    assert r.cursor == 0
+    # Two arrows in one read batch both processed.
+    r.feed_bytes(b"\x1b[B\x1b[B")
+    assert r.cursor == 2
+    # Bare ESC still exits.
+    r.feed_bytes(b"\x1b")
+    assert r.mode is Mode.NORMAL

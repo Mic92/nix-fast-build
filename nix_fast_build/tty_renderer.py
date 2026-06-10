@@ -45,6 +45,9 @@ SHOW_CURSOR = f"{CSI}?25h"
 
 EXTRACT_LINES = 5  # failure extract printed to scrollback
 
+# CSI final bytes for the cursor keys, mapped to browser navigation.
+ARROW_KEYS = {b"A": "k", b"B": "j", b"C": "n", b"D": "p"}
+
 
 class DisplayLogHandler(logging.Handler):
     """Routes log records through the display.
@@ -682,10 +685,31 @@ class TTYRenderer:
             # fire this callback in a busy loop forever.
             asyncio.get_running_loop().remove_reader(sys.stdin.fileno())
             return
-        for i, byte in enumerate(data):
-            if byte == 0x1B and i + 1 < len(data):
-                # Swallow escape sequences (arrow keys etc.) so their tail
-                # bytes aren't misread as commands or filter input.
+        self.feed_bytes(data)
+
+    def feed_bytes(self, data: bytes) -> None:
+        i = 0
+        while i < len(data):
+            byte = data[i]
+            if byte != 0x1B:
+                self.on_key(chr(byte) if byte < 0x80 else "\ufffd")
+                i += 1
+                continue
+            if i + 1 == len(data):
+                # Bare ESC (no sequence tail in this batch): the Esc key.
                 self.on_key("\x1b")
                 break
-            self.on_key(chr(byte) if byte < 0x80 else "\ufffd")
+            if data[i + 1] == ord("["):
+                # CSI sequence: consume through its final byte (0x40-0x7e)
+                # so the tail isn't misread as commands or filter input.
+                # Arrows navigate; other sequences are ignored — they must
+                # NOT act as Esc, or cursor keys would close the browser.
+                j = i + 2
+                while j < len(data) and not (0x40 <= data[j] <= 0x7E):
+                    j += 1
+                if (key := ARROW_KEYS.get(data[j : j + 1])) is not None:
+                    self.on_key(key)
+                i = j + 1
+            else:
+                # Alt-modified key or other two-byte escape: swallow both.
+                i += 2
