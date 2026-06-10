@@ -224,19 +224,7 @@ def capitalize_first_letter(s: str) -> str:
 
 def dump_json(file: IO[str], results: list[Result]) -> None:
     json.dump(
-        {
-            "results": [
-                {
-                    "type": r.result_type.name,
-                    "attr": r.attr,
-                    "success": r.success,
-                    "duration": r.duration,
-                    "error": r.error,
-                    **({"outputs": r.outputs} if r.outputs is not None else {}),
-                }
-                for r in results
-            ]
-        },
+        {"results": [r.as_dict() for r in results]},
         file,
         indent=2,
         sort_keys=True,

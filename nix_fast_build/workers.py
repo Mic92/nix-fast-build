@@ -5,6 +5,7 @@ import os
 import shlex
 import sys
 import timeit
+from asyncio import Queue
 from asyncio.subprocess import Process
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
@@ -26,7 +27,7 @@ async def run_evaluation(
     eval_proc: Process,
     build_queue: JobQueue,
     upload_queue: BuildQueue | None,
-    results: list[Result],
+    result_queue: "Queue[Result | None]",
     opts: Options,
 ) -> int:
     assert eval_proc.stdout
@@ -43,7 +44,7 @@ async def run_evaluation(
             raise Error(msg) from e
         error = job.get("error")
         attr = job.get("attr", "unknown-attribute")
-        results.append(
+        await result_queue.put(
             Result(
                 result_type=ResultType.EVAL,
                 attr=attr,
@@ -83,7 +84,7 @@ async def run_builds(
     build_output: IO,
     build_queue: JobQueue,
     optional_queues: list[BuildQueue],
-    results: list[Result],
+    result_queue: "Queue[Result | None]",
     opts: Options,
     nom_pipe: IO[bytes] | None = None,
 ) -> int:
@@ -98,8 +99,8 @@ async def run_builds(
                 logger.debug("fail-fast: skipping build of %s", next_job.attr)
                 continue
             job = next_job
-            print(f"  building {job.attr}")
-            sys.stdout.flush()
+            print(f"  building {job.attr}", file=sys.stderr)
+            sys.stderr.flush()
             if job.drv_path in drv_paths:
                 continue
             drv_paths.add(job.drv_path)
@@ -108,7 +109,7 @@ async def run_builds(
             build_result = await build.build(
                 stack, build_output, opts, nom_pipe=nom_pipe
             )
-            results.append(
+            await result_queue.put(
                 Result(
                     result_type=ResultType.BUILD,
                     attr=job.attr,
@@ -132,7 +133,7 @@ async def run_builds(
 
 async def run_queue_worker(
     queue: BuildQueue,
-    results: list[Result],
+    result_queue: "Queue[Result | None]",
     result_type: ResultType,
     label: str,
     push: Callable[[Build], Awaitable[int]],
@@ -145,7 +146,7 @@ async def run_queue_worker(
                 return 0
             start_time = timeit.default_timer()
             rc = await push(build)
-            results.append(
+            await result_queue.put(
                 Result(
                     result_type=result_type,
                     attr=build.attr,
@@ -158,7 +159,7 @@ async def run_queue_worker(
 
 async def run_niks3_upload(
     niks3_queue: BuildQueue,
-    results: list[Result],
+    result_queue: "Queue[Result | None]",
     opts: Options,
 ) -> int:
     while True:
@@ -201,21 +202,23 @@ async def run_niks3_upload(
                 opts,
             )
             logger.debug("run %s", shlex.join(cmd))
-            proc = await asyncio.create_subprocess_exec(*cmd, env=env)
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, env=env, stdout=sys.stderr.fileno()
+            )
             rc = await proc.wait()
             duration = timeit.default_timer() - start_time
 
             # Record result for each build
-            results.extend(
-                Result(
-                    result_type=ResultType.NIKS3,
-                    attr=build.attr,
-                    success=rc == 0,
-                    duration=duration / len(builds),
-                    error=f"niks3 upload exited with {rc}" if rc != 0 else None,
+            for build in builds:
+                await result_queue.put(
+                    Result(
+                        result_type=ResultType.NIKS3,
+                        attr=build.attr,
+                        success=rc == 0,
+                        duration=duration / len(builds),
+                        error=f"niks3 upload exited with {rc}" if rc != 0 else None,
+                    )
                 )
-                for build in builds
-            )
 
 
 async def report_progress(

@@ -64,6 +64,17 @@ def test_build_json() -> None:
         assert rc == 0
 
 
+def test_stream_json_lines(capfd: pytest.CaptureFixture[str]) -> None:
+    rc = cli(["--option", "builders", "", "--stream-json-lines", "--no-nom"])
+    assert rc == 0
+    lines = [line for line in capfd.readouterr().out.splitlines() if line]
+    assert lines
+    results = [json.loads(line) for line in lines]
+    assert any(r["type"] == "BUILD" for r in results)
+    for r in results:
+        assert r["success"] is True
+
+
 def test_reference_lock_file() -> None:
     """--reference-lock-file is forwarded to nix-eval-jobs."""
     # Pointing at the project's own lock file must behave like a normal build.

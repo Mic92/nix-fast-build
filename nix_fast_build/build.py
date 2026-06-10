@@ -3,6 +3,7 @@ import contextlib
 import logging
 import os
 import shlex
+import sys
 from asyncio import Queue
 from asyncio.subprocess import Process
 from collections.abc import AsyncIterator, Callable, Coroutine
@@ -96,7 +97,7 @@ class Build:
         )
         cmd = maybe_remote(cmd, opts)
         logger.debug("run %s", shlex.join(cmd))
-        proc = await asyncio.create_subprocess_exec(*cmd)
+        proc = await asyncio.create_subprocess_exec(*cmd, stdout=sys.stderr.fileno())
         await exit_stack.enter_async_context(ensure_stop(proc, cmd))
         return await proc.wait()
 
@@ -115,7 +116,7 @@ class Build:
             opts,
         )
         logger.debug("run %s", shlex.join(cmd))
-        proc = await asyncio.create_subprocess_exec(*cmd)
+        proc = await asyncio.create_subprocess_exec(*cmd, stdout=sys.stderr.fileno())
         return await proc.wait()
 
     async def _query_build_closure(self, opts: Options) -> list[str]:
@@ -183,7 +184,7 @@ class Build:
             opts,
         )
         logger.debug("run %s", shlex.join(cmd))
-        proc = await asyncio.create_subprocess_exec(*cmd)
+        proc = await asyncio.create_subprocess_exec(*cmd, stdout=sys.stderr.fileno())
         return await proc.wait()
 
     async def download(self, exit_stack: AsyncExitStack, opts: Options) -> int:
@@ -203,7 +204,9 @@ class Build:
         logger.debug("run %s", shlex.join(cmd))
         env = os.environ.copy()
         env["NIX_SSHOPTS"] = " ".join(opts.remote_ssh_options)
-        proc = await asyncio.create_subprocess_exec(*cmd, env=env)
+        proc = await asyncio.create_subprocess_exec(
+            *cmd, env=env, stdout=sys.stderr.fileno()
+        )
         await exit_stack.enter_async_context(ensure_stop(proc, cmd))
         return await proc.wait()
 

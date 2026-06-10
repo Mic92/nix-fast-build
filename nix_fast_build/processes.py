@@ -4,6 +4,7 @@ import logging
 import shlex
 import signal
 import subprocess
+import sys
 from asyncio.subprocess import Process
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -32,7 +33,10 @@ async def ensure_stop(
                 try:
                     await asyncio.wait_for(proc.wait(), timeout=wait_timeout)
                 except TimeoutError:
-                    print(f"Failed to stop process {shlex.join(cmd)}. Killing it.")
+                    print(
+                        f"Failed to stop process {shlex.join(cmd)}. Killing it.",
+                        file=sys.stderr,
+                    )
                     proc.kill()
                     await proc.wait()
 
@@ -55,7 +59,7 @@ async def remote_temp_dir(opts: Options) -> AsyncIterator[Path]:
     finally:
         cmd = [*ssh_cmd, "rm", "-rf", tempdir]
         logger.info("run %s", shlex.join(cmd))
-        proc = await asyncio.create_subprocess_exec(*cmd)
+        proc = await asyncio.create_subprocess_exec(*cmd, stdout=sys.stderr.fileno())
         await proc.wait()
 
 
@@ -165,7 +169,7 @@ async def run_cachix_daemon(
         ],
         opts,
     )
-    proc = await asyncio.create_subprocess_exec(*cmd)
+    proc = await asyncio.create_subprocess_exec(*cmd, stdout=sys.stderr.fileno())
     try:
         await exit_stack.enter_async_context(ensure_stop(proc, cmd))
         while True:
@@ -192,6 +196,6 @@ async def run_cachix_daemon_stop(
         ],
         opts,
     )
-    proc = await asyncio.create_subprocess_exec(*cmd)
+    proc = await asyncio.create_subprocess_exec(*cmd, stdout=sys.stderr.fileno())
     await exit_stack.enter_async_context(ensure_stop(proc, cmd))
     return await proc.wait()

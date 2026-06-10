@@ -1,7 +1,8 @@
 import asyncio
+import json
 import logging
 import sys
-from asyncio import TaskGroup
+from asyncio import Queue, TaskGroup
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
@@ -75,6 +76,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             run_cachix_daemon(stack, tmp_dir, opts.cachix_cache, opts)
         )
     results: list[Result] = []
+    result_queue: Queue[Result | None] = Queue()
     build_queue = JobQueue()
 
     # Build list of optional queues that are actually needed
@@ -91,7 +93,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                 queue,
                 opts.max_jobs,
                 name,
-                lambda: run_queue_worker(queue, results, result_type, name, push),
+                lambda: run_queue_worker(queue, result_queue, result_type, name, push),
             )
         )
         return queue
@@ -120,27 +122,38 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                 niks3_queue,
                 1,
                 "niks3",
-                lambda: run_niks3_upload(niks3_queue, results, opts),
+                lambda: run_niks3_upload(niks3_queue, result_queue, opts),
             )
         )
 
     if opts.remote_url and opts.download:
         add_queue("download", ResultType.DOWNLOAD, lambda b: b.download(stack, opts))
 
+    async def dequeue_results() -> None:
+        # Stream results as they arrive and collect them for the final
+        # summary and result file. A None sentinel stops the task.
+        while True:
+            result = await result_queue.get()
+            if result is None:
+                return
+            if opts.stream_json_lines:
+                print(json.dumps(result.as_dict()), flush=True)
+            results.append(result)
+
     async with TaskGroup() as tg:
-        tasks = []
-        tasks.append(
-            tg.create_task(
-                run_evaluation(eval_proc, build_queue, upload_queue, results, opts)
-            )
+        tasks: list[asyncio.Task[object]] = []
+        dequeue_task = tg.create_task(dequeue_results(), name="dequeue-results")
+        tasks.append(dequeue_task)
+        evaluation = tg.create_task(
+            run_evaluation(eval_proc, build_queue, upload_queue, result_queue, opts)
         )
-        evaluation = tasks[0]
+        tasks.append(evaluation)
         # When nom is enabled, each nix-build captures its own stderr and
         # forwards complete lines to the shared nom pipe, avoiding
         # interleaved writes from concurrent builds.  build_output is only
         # used as the nix-build stderr fd when nom is *not* active.
         nom_pipe: IO[bytes] | None = pipe.write_file if pipe else None
-        build_output = sys.stdout.buffer
+        build_output = sys.stderr.buffer
         logger.debug("Starting %d build tasks", opts.max_jobs)
         tasks.extend(
             tg.create_task(
@@ -149,7 +162,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                     build_output,
                     build_queue,
                     [oq.queue for oq in optional_queues],
-                    results,
+                    result_queue,
                     opts,
                     nom_pipe=nom_pipe,
                 ),
@@ -188,6 +201,10 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             logger.debug("Stopping progress reporter")
             progress_task.cancel()
             await progress_task
+
+        # All workers are done; stop the result consumer.
+        result_queue.put_nowait(None)
+        await dequeue_task
 
         for task in tasks:
             assert task.done(), f"Task {task.get_name()} is not done"
@@ -253,9 +270,9 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
 async def async_main(args: list[str]) -> int:
     opts = await parse_args(args)
     if opts.debug:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
     else:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
     stack = AsyncExitStack()
     # using async wait here seems to make the return value skipped in the non-execptional case
