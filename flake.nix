@@ -27,7 +27,12 @@
         imports = [ ./treefmt.nix ];
         systems = officialPlatforms ++ [ "riscv64-linux" ];
         perSystem =
-          { pkgs, self', ... }:
+          {
+            pkgs,
+            self',
+            config,
+            ...
+          }:
           {
             packages.nix-fast-build = pkgs.callPackage ./default.nix {
               # we don't want to compile ghc otherwise
@@ -64,8 +69,24 @@
               let
                 packages = lib.mapAttrs' (n: lib.nameValuePair "package-${n}") self'.packages;
                 devShells = lib.mapAttrs' (n: lib.nameValuePair "devShell-${n}") self'.devShells;
+                # Building inputDerivation turns build-time deps into runtime
+                # references, so CI binary caches retain them.
+                closures = lib.mapAttrs' (n: drv: lib.nameValuePair "closure-${n}" drv.inputDerivation) (
+                  packages // devShells // { treefmt = config.treefmt.build.check inputs.self; }
+                );
+                # Flake inputs are fetched, not built, so caches miss them too.
+                # Same for bashInteractive, which nix develop fetches (all
+                # outputs) for its shell.
+                flake-inputs = pkgs.runCommand "flake-inputs" { } ''
+                  printf '%s\n' ${
+                    lib.concatMapStringsSep " " toString (
+                      lib.attrValues (lib.filterAttrs (_: lib.isAttrs) inputs)
+                      ++ map (o: pkgs.bashInteractive.${o}) pkgs.bashInteractive.outputs
+                    )
+                  } > $out
+                '';
               in
-              packages // devShells;
+              packages // devShells // closures // { closure-flake-inputs = flake-inputs; };
           };
       }
     );
