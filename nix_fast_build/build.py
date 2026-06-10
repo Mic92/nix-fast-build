@@ -154,9 +154,7 @@ class Build:
         return paths or list(self.outputs.values())
 
     async def upload_attic(self, opts: Options) -> int:
-        if opts.attic_cache is None:
-            return 0
-        if not self.outputs:
+        if opts.attic_cache is None or not self.outputs:
             return 0
         push_args = ["push"]
         if opts.attic_ignore_upstream_cache_filter:
