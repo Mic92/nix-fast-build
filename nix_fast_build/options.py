@@ -60,8 +60,15 @@ class Options:
     override_inputs: list[list[str]] = field(default_factory=list)
     select_expr: str | None = None
     fail_fast: bool = False
-
     reference_lock_file: str | None = None
+
+    cachix_cache: str | None = None
+
+    attic_cache: str | None = None
+    attic_ignore_upstream_cache_filter: bool = False
+    attic_push_build_closure: bool = False
+
+    niks3_server: str | None = None
 
     _stop_event: asyncio.Event = field(
         default_factory=asyncio.Event, init=False, repr=False
@@ -75,14 +82,6 @@ class Options:
     @property
     def should_stop(self) -> bool:
         return self.fail_fast and self._stop_event.is_set()
-
-    cachix_cache: str | None = None
-
-    attic_cache: str | None = None
-    attic_ignore_upstream_cache_filter: bool = False
-    attic_push_build_closure: bool = False
-
-    niks3_server: str | None = None
 
     def nix_command(self, args: list[str]) -> list[str]:
         return _nix_command(self.nix_bin, args)
