@@ -124,11 +124,8 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             )
         )
 
-    download_queue: QueueWithContext[Build | StopTask] | None = None
     if opts.remote_url and opts.download:
-        download_queue = add_queue(
-            "download", ResultType.DOWNLOAD, lambda b: b.download(stack, opts)
-        )
+        add_queue("download", ResultType.DOWNLOAD, lambda b: b.download(stack, opts))
 
     async with TaskGroup() as tg:
         tasks = []
@@ -169,7 +166,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         if not opts.nom:
             logger.debug("Starting progress reporter")
             progress_task = tg.create_task(
-                report_progress(build_queue, upload_queue, download_queue),
+                report_progress(build_queue, optional_queues),
                 name="progress",
             )
             tasks.append(progress_task)
