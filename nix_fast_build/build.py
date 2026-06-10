@@ -34,22 +34,26 @@ class Build:
     async def build(
         self,
         stack: AsyncExitStack,
-        build_output: IO[str],
+        build_output: IO[bytes],
         opts: Options,
         nom_pipe: IO[bytes] | None = None,
     ) -> BuildResult:
         """Build and return BuildResult."""
-        proc = await stack.enter_async_context(
-            nix_build(self.attr, self.drv_path, build_output, opts, nom_pipe=nom_pipe)
-        )
-
         rc = 0
-        for _ in range(opts.retries + 1):
+        for attempt in range(opts.retries + 1):
+            proc = await stack.enter_async_context(
+                nix_build(
+                    self.attr, self.drv_path, build_output, opts, nom_pipe=nom_pipe
+                )
+            )
             rc = await proc.wait()
             if rc == 0:
                 logger.debug(f"build {self.attr} succeeded")
                 return BuildResult(return_code=rc, log_output="")
-            logger.warning(f"build {self.attr} exited with {rc}")
+            logger.warning(
+                f"build {self.attr} exited with {rc} "
+                f"(attempt {attempt + 1}/{opts.retries + 1})"
+            )
 
         # If build failed, get the log using nix log
         log_output = await self.get_build_log(opts)
