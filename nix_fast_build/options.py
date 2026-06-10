@@ -52,6 +52,8 @@ class Options:
     debug: bool = False
     copy_to: str | None = None
     nom: bool = True
+    no_fold: bool = False
+    stall_timeout: float = 300.0
     download: bool = True
     no_link: bool = False
     out_link: str = "result"
@@ -287,6 +289,17 @@ async def parse_args(args: list[str]) -> Options:
         help="Don't use nix-output-monitor to print build output (default: false)",
         action="store_true",
         default=None,
+    )
+    parser.add_argument(
+        "--no-fold",
+        help="Don't emit ::group:: fold markers around successful build logs on Actions-style CI (default: false)",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--stall-timeout",
+        type=float,
+        default=300.0,
+        help="Seconds without build output before dumping its last lines and streaming it live (default: 300)",
     )
     parser.add_argument(
         "--systems",
@@ -535,6 +548,8 @@ async def parse_args(args: list[str]) -> Options:
         remote_ssh_options=remote_ssh_options,
         max_jobs=a.max_jobs,
         nom=not a.no_nom,
+        no_fold=a.no_fold,
+        stall_timeout=a.stall_timeout,
         download=not a.no_download,
         debug=a.debug,
         systems=systems,

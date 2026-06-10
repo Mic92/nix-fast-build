@@ -12,6 +12,7 @@ from contextlib import AsyncExitStack
 from typing import IO, Any
 
 from .build import Build, BuildQueue, Job, JobQueue, OptionalQueue, StopTask
+from .ci_renderer import CIRenderer
 from .errors import Error
 from .options import Options, maybe_remote, nix_shell
 from .results import Result, ResultType
@@ -81,12 +82,12 @@ async def run_evaluation(
 
 async def run_builds(
     stack: AsyncExitStack,
-    build_output: IO,
     build_queue: JobQueue,
     optional_queues: list[BuildQueue],
     result_queue: "Queue[Result | None]",
     opts: Options,
     nom_pipe: IO[bytes] | None = None,
+    renderer: CIRenderer | None = None,
 ) -> int:
     drv_paths: set[Any] = set()
 
@@ -99,15 +100,17 @@ async def run_builds(
                 logger.debug("fail-fast: skipping build of %s", next_job.attr)
                 continue
             job = next_job
-            print(f"  building {job.attr}", file=sys.stderr)
-            sys.stderr.flush()
+            if renderer is None:
+                # nom draws its own status; announce starts ourselves.
+                print(f"  building {job.attr}", file=sys.stderr)
+                sys.stderr.flush()
             if job.drv_path in drv_paths:
                 continue
             drv_paths.add(job.drv_path)
             build = Build(job.attr, job.drv_path, job.outputs)
             start_time = timeit.default_timer()
             build_result = await build.build(
-                stack, build_output, opts, nom_pipe=nom_pipe
+                stack, opts, nom_pipe=nom_pipe, renderer=renderer
             )
             await result_queue.put(
                 Result(

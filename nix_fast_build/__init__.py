@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from asyncio.subprocess import Process
 
 from .build import Build, BuildQueue, JobQueue, OptionalQueue, StopTask
+from .ci_renderer import CIRenderer
 from .errors import Error
 from .options import EvalMode, Options, ResultFormat, parse_args
 from .pipe import Pipe
@@ -32,6 +33,7 @@ from .report import (
 )
 from .results import Result, ResultType, Summary
 from .sources import upload_sources
+from .term import fold_markers, want_color
 from .workers import (
     report_progress,
     run_builds,
@@ -66,9 +68,17 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     eval_proc = await stack.enter_async_context(nix_eval_jobs(tmp_dir, opts))
     pipe: Pipe | None = None
     output_monitor: Process | None = None
+    renderer: CIRenderer | None = None
     if opts.nom:
         pipe = stack.enter_context(Pipe())
         output_monitor = await stack.enter_async_context(nix_output_monitor(pipe, opts))
+    else:
+        renderer = CIRenderer(
+            sys.stderr,
+            color=want_color(sys.stderr.isatty()),
+            fold=fold_markers() and not opts.no_fold,
+            stall_timeout=opts.stall_timeout,
+        )
 
     cachix_socket_path: Path | None = None
     if opts.cachix_cache:
@@ -148,23 +158,26 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             run_evaluation(eval_proc, build_queue, upload_queue, result_queue, opts)
         )
         tasks.append(evaluation)
-        # When nom is enabled, each nix-build captures its own stderr and
-        # forwards complete lines to the shared nom pipe, avoiding
-        # interleaved writes from concurrent builds.  build_output is only
-        # used as the nix-build stderr fd when nom is *not* active.
+        # Each nix-build captures its own stderr; complete lines go to the
+        # shared nom pipe or to our own renderer, so concurrent builds
+        # never interleave mid-line.
         nom_pipe: IO[bytes] | None = pipe.write_file if pipe else None
-        build_output = sys.stderr.buffer
+        if renderer is not None:
+            renderer.start_heartbeat()
+            # Stop via the exit stack so the task doesn't leak (and warn
+            # at shutdown) when the TaskGroup below raises.
+            stack.push_async_callback(renderer.stop_heartbeat)
         logger.debug("Starting %d build tasks", opts.max_jobs)
         tasks.extend(
             tg.create_task(
                 run_builds(
                     stack,
-                    build_output,
                     build_queue,
                     [oq.queue for oq in optional_queues],
                     result_queue,
                     opts,
                     nom_pipe=nom_pipe,
+                    renderer=renderer,
                 ),
                 name=f"build-{i}",
             )
@@ -213,6 +226,9 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     # the output; the teardown in the stack is a no-op afterwards.
     if pipe is not None and output_monitor is not None:
         await stop_nom(output_monitor, pipe)
+    if renderer is not None:
+        # Idempotent; the stack callback handles exceptional paths.
+        await renderer.stop_heartbeat()
 
     rc = 0
     stats_by_type: dict[ResultType, Summary] = defaultdict(Summary)

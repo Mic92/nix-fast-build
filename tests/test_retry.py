@@ -1,7 +1,6 @@
 """Regression test: --retries must re-run the build, not re-read the old exit code."""
 
 import asyncio
-import os
 from contextlib import AsyncExitStack
 from pathlib import Path
 
@@ -32,14 +31,12 @@ esac
         async with AsyncExitStack() as stack:
             return await build.build(
                 stack,
-                devnull,
                 Options(nix_bin=[str(fake_nix)], retries=retries, no_link=True),
             )
         # Unreachable; mypy can't tell AsyncExitStack never suppresses here.
         raise AssertionError
 
-    with Path(os.devnull).open("wb") as devnull:
-        result = asyncio.run(go())
+    result = asyncio.run(go())
     return result, len(attempts.read_text().splitlines())
 
 
