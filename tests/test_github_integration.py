@@ -5,7 +5,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from nix_fast_build import (
-    Options,
     Result,
     ResultType,
     get_ci_summary_file,
@@ -25,11 +24,6 @@ def test_github_actions_workflow() -> None:
             # Set up GitHub Actions environment
             os.environ["GITHUB_ACTIONS"] = "true"
             os.environ["GITHUB_STEP_SUMMARY"] = str(summary_path)
-
-            # Create options
-            opts = Options(
-                flake_url="github:example/repo", flake_fragment="checks.x86_64-linux"
-            )
 
             # Verify it picks up the environment variable
             ci_summary_file = get_ci_summary_file()
@@ -83,7 +77,7 @@ def test_github_actions_workflow() -> None:
             ]
 
             # Write the summary
-            write_ci_summary(summary_path, opts, results, rc=1)
+            write_ci_summary(summary_path, results, rc=1)
 
             # Verify the summary was written
             assert summary_path.exists()
@@ -123,7 +117,6 @@ def test_long_log_truncation() -> None:
     """Test that very long logs are truncated."""
     with TemporaryDirectory() as d:
         summary_file = Path(d) / "summary.md"
-        opts = Options(flake_url=".#checks", flake_fragment="checks")
 
         # Create a log with more than 100 lines
         long_log = "\n".join([f"log line {i}" for i in range(150)])
@@ -139,7 +132,7 @@ def test_long_log_truncation() -> None:
             ),
         ]
 
-        write_ci_summary(summary_file, opts, results, rc=1)
+        write_ci_summary(summary_file, results, rc=1)
 
         content = summary_file.read_text()
 
