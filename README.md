@@ -289,6 +289,22 @@ nix-fast-build --result-format junit --result-file result.xml
 nix-shell -p python3Packages.junit2html --run 'junit2html result.xml result.html'
 ```
 
+### Streaming results as JSON Lines
+
+With `--stream-json-lines`, nix-fast-build prints one JSON object per result
+(evaluation, build, upload, download) to standard output as soon as it is
+available, similar to nix-eval-jobs. All logs and build output go to standard
+error, so stdout contains only JSON Lines. This implies `--no-nom`.
+
+```console
+nix-fast-build --stream-json-lines
+{"type": "EVAL", "attr": "x86_64-linux.package-default", "success": true, "duration": 0.0, "error": null}
+{"type": "BUILD", "attr": "x86_64-linux.package-default", "success": true, "duration": 1.2, "error": null, "outputs": {"out": "/nix/store/..."}}
+```
+
+This is useful for CI integrations that want to react to results as they happen,
+e.g. setting per-attribute commit statuses.
+
 ## Reference
 
 ```console
@@ -309,7 +325,7 @@ usage: nix-fast-build [-h] [--nix NIX] [--nix-eval-jobs NIX_EVAL_JOBS]
                       [--eval-max-memory-size EVAL_MAX_MEMORY_SIZE]
                       [--eval-workers EVAL_WORKERS]
                       [--result-file RESULT_FILE]
-                      [--result-format {json,junit}]
+                      [--result-format {json,junit}] [--stream-json-lines]
                       [--override-input input_path flake_url]
                       [--select NIX_FUNCTION]
                       [--reference-lock-file REFERENCE_LOCK_FILE]
@@ -389,6 +405,7 @@ options:
                         File to write build results to
   --result-format {json,junit}
                         Format of the build result file
+  --stream-json-lines   Stream results to standard output as JSON Lines
   --override-input input_path flake_url
                         Override a specific flake input (e.g.
                         `dwarffs/nixpkgs`).
