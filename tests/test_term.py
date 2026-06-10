@@ -78,6 +78,9 @@ def test_sanitize_caps_length() -> None:
         ({"CLICOLOR_FORCE": "1"}, False, True),
         # NO_COLOR wins over force
         ({"NO_COLOR": "1", "FORCE_COLOR": "1"}, True, False),
+        # Actions CI renders ANSI even though stderr is a pipe
+        ({"GITHUB_ACTIONS": "true"}, False, True),
+        ({"GITHUB_ACTIONS": "true", "NO_COLOR": "1"}, False, False),
     ],
 )
 def test_want_color(
@@ -86,7 +89,7 @@ def test_want_color(
     expected: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    for var in ("NO_COLOR", "FORCE_COLOR", "CLICOLOR_FORCE"):
+    for var in ("NO_COLOR", "FORCE_COLOR", "CLICOLOR_FORCE", "GITHUB_ACTIONS"):
         monkeypatch.delenv(var, raising=False)
     for k, v in env.items():
         monkeypatch.setenv(k, v)

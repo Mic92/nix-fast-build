@@ -105,12 +105,16 @@ def trunc_middle(s: str, n: int) -> str:
 
 
 def want_color(isatty: bool) -> bool:
-    """Color decision: NO_COLOR > CLICOLOR_FORCE/FORCE_COLOR > isatty."""
+    """Color decision: NO_COLOR > CLICOLOR_FORCE/FORCE_COLOR > isatty.
+
+    Actions CI counts as color-capable: its log viewer renders ANSI,
+    but the job's stderr is a pipe, so isatty alone would disable it.
+    """
     if os.environ.get("NO_COLOR"):
         return False
     if os.environ.get("CLICOLOR_FORCE") or os.environ.get("FORCE_COLOR"):
         return True
-    return isatty
+    return isatty or fold_markers()
 
 
 def fold_markers() -> bool:
