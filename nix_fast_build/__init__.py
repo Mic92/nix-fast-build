@@ -165,14 +165,14 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                 tg.create_task(oq.make_worker(), name=f"{oq.name}-{i}")
                 for i in range(oq.worker_count)
             )
+        progress_task = None
         if not opts.nom:
             logger.debug("Starting progress reporter")
-            tasks.append(
-                tg.create_task(
-                    report_progress(build_queue, upload_queue, download_queue),
-                    name="progress",
-                )
+            progress_task = tg.create_task(
+                report_progress(build_queue, upload_queue, download_queue),
+                name="progress",
             )
+            tasks.append(progress_task)
         logger.debug("Waiting for evaluation to finish...")
         eval_rc = await evaluation
 
@@ -187,10 +187,10 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                 oq.queue.put_nowait(StopTask())
             await oq.queue.join()
 
-        if not opts.nom:
+        if progress_task is not None:
             logger.debug("Stopping progress reporter")
-            tasks[-1].cancel()
-            await tasks[-1]
+            progress_task.cancel()
+            await progress_task
 
         for task in tasks:
             assert task.done(), f"Task {task.get_name()} is not done"
