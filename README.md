@@ -1,10 +1,10 @@
 # nix-fast-build 🚀
 
-Combine the power of `nix-eval-jobs` with `nix-output-monitor` to speed-up your
-evaluation and building process. `nix-fast-build` works with both flakes and
-plain Nix expressions, and can integrate with remote machines by uploading the
-current flake, performing the evaluation/build remotely, and then transferring
-the resultant store paths back to you.
+Combine the power of `nix-eval-jobs` with parallel builds and a built-in build
+log renderer to speed-up your evaluation and building process. `nix-fast-build`
+works with both flakes and plain Nix expressions, and can integrate with remote
+machines by uploading the current flake, performing the evaluation/build
+remotely, and then transferring the resultant store paths back to you.
 
 ## Why `nix-fast-build`?
 
@@ -26,7 +26,8 @@ Under the hood:
    parallel.
 2. As soon as attributes complete evaluation, `nix-fast-build` initiates their
    build, even if the overall evaluation is ongoing.
-3. Lastly, `nix-output-monitor` to show the build progress nicely.
+3. A built-in renderer shows build progress: interactive with a failure log
+   browser on a terminal, contiguous per-build log blocks in CI.
 4. (Optional) Once a build finishes, `nix-fast-build` can initiate its upload to
    a designated remote binary cache.
 
@@ -164,7 +165,7 @@ Example workflow:
 
 ```yaml
 - name: Build with nix-fast-build
-  run: nix-fast-build --no-nom --skip-cached
+  run: nix-fast-build --skip-cached
 ```
 
 Build logs for failed packages are retrieved using `nix log` and displayed in
@@ -224,7 +225,7 @@ By default nix-fast-build will evaluate all systems in `.#checks`, you can limit
 it to the current system by using this command:
 
 ```console
-$ nix run github:Mic92/nix-fast-build -- --skip-cached --no-nom --flake ".#checks.$(nix eval --raw --impure --file builtins.currentSystem)"
+$ nix run github:Mic92/nix-fast-build -- --skip-cached --flake ".#checks.$(nix eval --raw --impure --file builtins.currentSystem)"
 ```
 
 ## Cachix support
@@ -328,9 +329,10 @@ usage: nix-fast-build [-h] [--nix NIX] [--nix-eval-jobs NIX_EVAL_JOBS]
                       [--attic-cache ATTIC_CACHE]
                       [--attic-ignore-upstream-cache-filter]
                       [--attic-push-build-closure]
-                      [--niks3-server NIKS3_SERVER] [--no-nom]
-                      [--systems SYSTEMS] [--retries RETRIES] [--no-link]
-                      [--out-link OUT_LINK] [--remote REMOTE]
+                      [--niks3-server NIKS3_SERVER] [--no-nom] [--no-fold]
+                      [--stall-timeout STALL_TIMEOUT] [--systems SYSTEMS]
+                      [--retries RETRIES] [--no-link] [--out-link OUT_LINK]
+                      [--store STORE] [--remote REMOTE]
                       [--always-upload-source] [--no-download] [--skip-cached]
                       [--copy-to COPY_TO] [--debug]
                       [--eval-max-memory-size EVAL_MAX_MEMORY_SIZE]
@@ -401,6 +403,9 @@ options:
   --retries RETRIES     Number of times to retry failed builds
   --no-link             Do not create an out-link for builds (default: false)
   --out-link OUT_LINK   Name of the out-link for builds (default: result)
+  --store STORE         Nix store URL to build against (e.g. ssh-ng://host).
+                        Evaluation stays local; only builds are dispatched.
+                        Implies --no-link.
   --remote REMOTE       Remote machine to build on
   --always-upload-source
                         Always upload sources to remote machine. This is
@@ -436,6 +441,6 @@ options:
   --reference-lock-file REFERENCE_LOCK_FILE
                         Read the given lock file instead of `flake.lock`
                         within the top-level flake.
-  --fail-fast           Stop as soon as any build or evaluation fails, instead of continuing with
-                        remaining builds (default: false)
+  --fail-fast           Stop as soon as any build or evaluation fails, instead
+                        of continuing with remaining builds.
 ```
