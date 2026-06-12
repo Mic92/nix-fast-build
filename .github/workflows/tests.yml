@@ -9,7 +9,6 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
-        nom: ["", "--no-nom"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -19,11 +18,11 @@ jobs:
       - uses: NixOS/nix-installer-action@main
       - uses: Mic92/hestia/action@main
       - name: Self-test
-        run: nix shell --inputs-from . nixpkgs#coreutils -c timeout --verbose 600 nix run . -- ${{ matrix.nom }}
+        run: nix shell --inputs-from . nixpkgs#coreutils -c timeout --verbose 600 nix run .
 
       - name: Self-test (should fail)
         run: |
-          if nix shell --inputs-from . nixpkgs#coreutils -c timeout --verbose 600 nix run . -- --flake .#legacyPackages ${{ matrix.nom }}; then
+          if nix shell --inputs-from . nixpkgs#coreutils -c timeout --verbose 600 nix run . -- --flake .#legacyPackages; then
             echo "expect this to fail"
             false
           fi
