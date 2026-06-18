@@ -1,4 +1,6 @@
 import io
+import os
+import threading
 
 from nix_fast_build.ci_renderer import FAILURE_TAIL_LINES, CIRenderer
 from nix_fast_build.log_format import (
@@ -183,3 +185,31 @@ def test_long_failure_log_folds_head() -> None:
     feed(b2, "boom")
     r2.finish_build(b2, 1)
     assert "::group::earlier output" not in out2.getvalue()
+
+
+def test_print_recovers_from_nonblocking_fd() -> None:
+    # asyncio subprocesses can flip our output fd to non-blocking, which
+    # made writes raise BlockingIOError mid-build. The renderer must force
+    # the fd back to blocking and still emit the output.
+    r_fd, w_fd = os.pipe()
+    os.set_blocking(w_fd, False)
+    out = os.fdopen(w_fd, "w")
+    drained: list[bytes] = []
+
+    def drain() -> None:
+        while chunk := os.read(r_fd, 1 << 20):
+            drained.append(chunk)
+
+    reader = threading.Thread(target=drain)
+    reader.start()
+    try:
+        renderer = CIRenderer(out, color=False, fold=False, clock=FakeClock())
+        b = renderer.start_build("pkg", DRV)
+        feed(b, "boom")
+        renderer.finish_build(b, 0)
+        assert os.get_blocking(w_fd)
+    finally:
+        out.close()
+        reader.join()
+        os.close(r_fd)
+    assert b"pkg> boom" in b"".join(drained)
