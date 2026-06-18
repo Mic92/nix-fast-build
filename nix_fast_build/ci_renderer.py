@@ -11,6 +11,7 @@ seconds are escalated to live streaming.
 
 import asyncio
 import contextlib
+import os
 import time
 from collections import deque
 from collections.abc import Callable
@@ -56,6 +57,10 @@ class CIRenderer:
         return f"{code}{s}{RESET}" if self.color else s
 
     def _print(self, *lines: str) -> None:
+        # asyncio subprocesses inherit this fd and can flip it to
+        # non-blocking, making writes raise BlockingIOError. Keep it blocking.
+        with contextlib.suppress(OSError, ValueError, AttributeError):
+            os.set_blocking(self.out.fileno(), True)
         self.out.write("".join(f"{line}\n" for line in lines))
         self.out.flush()
 
