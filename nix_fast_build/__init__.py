@@ -102,8 +102,12 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         renderer; written directly it would corrupt the TTY region."""
         async for raw in read_eval_stderr_lines(eval_jobs.stderr):
             line = sanitize_line(raw.decode(errors="replace").rstrip("\r\n"))
-            if line:
-                renderer.log_line(line)
+            if not line:
+                continue
+            # nix already retries this internally (hence "ignored"); drop it
+            if "error (ignored): SQLite database" in line and "is busy" in line:
+                continue
+            renderer.log_line(line)
 
     cachix_socket_path: Path | None = None
     if opts.cachix_cache:
