@@ -5,9 +5,19 @@ import pytest
 from nix_fast_build.term import (
     MAX_LINE_LEN,
     fold_markers,
+    is_ignored_eval_line,
     sanitize_line,
     want_color,
 )
+
+
+def test_is_ignored_eval_line_colored() -> None:
+    # nix colors "error (ignored):" on a TTY, which broke the plain match.
+    line = sanitize_line(
+        "\x1b[31;1merror (ignored):\x1b[0m SQLite database '/cache/x.sqlite' is busy"
+    )
+    assert is_ignored_eval_line(line)
+    assert not is_ignored_eval_line("evaluation warning: 'system' has been renamed")
 
 
 def test_sanitize_passthrough() -> None:

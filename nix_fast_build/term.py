@@ -18,6 +18,21 @@ _STRAY_ESC_RE = re.compile(r"\x1b(?!\[[0-?]*[ -/]*m)")
 _TRAILING_PARTIAL_SGR_RE = re.compile(r"\x1b[^m]*$")
 
 
+def strip_ansi(s: str) -> str:
+    """Remove all ANSI escape sequences (for content matching, not display)."""
+    return ANSI_RE.sub("", s)
+
+
+def is_ignored_eval_line(line: str) -> bool:
+    """True for the harmless eval-cache "SQLite database is busy" error.
+
+    nix retries it internally (hence "ignored") and colors the prefix on a
+    TTY, so match against the ANSI-stripped text.
+    """
+    plain = strip_ansi(line)
+    return "error (ignored): SQLite database" in plain and "is busy" in plain
+
+
 def sanitize_line(s: str) -> str:
     """Make one captured log line safe to re-emit.
 

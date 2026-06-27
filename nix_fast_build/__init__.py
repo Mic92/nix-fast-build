@@ -28,7 +28,7 @@ from .report import (
 )
 from .results import Result, ResultType, Summary
 from .sources import upload_sources
-from .term import fold_markers, sanitize_line, want_color
+from .term import fold_markers, is_ignored_eval_line, sanitize_line, want_color
 from .tty_renderer import TTYRenderer
 from .workers import (
     report_progress,
@@ -104,8 +104,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             line = sanitize_line(raw.decode(errors="replace").rstrip("\r\n"))
             if not line:
                 continue
-            # nix already retries this internally (hence "ignored"); drop it
-            if "error (ignored): SQLite database" in line and "is busy" in line:
+            if is_ignored_eval_line(line):
                 continue
             renderer.log_line(line)
 
