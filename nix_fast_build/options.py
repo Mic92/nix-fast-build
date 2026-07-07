@@ -11,6 +11,10 @@ from pathlib import Path
 from .errors import Error
 
 
+def _deprecated_help(command: str) -> str:
+    return f"DEPRECATED: replaced by {command} | "
+
+
 def _nix_command(nix_bin: list[str], args: list[str]) -> list[str]:
     return [*nix_bin, "--experimental-features", "nix-command flakes", *args]
 
@@ -63,6 +67,8 @@ class Options:
     select_expr: str | None = None
     fail_fast: bool = False
     reference_lock_file: str | None = None
+    eval_args: list[str] = field(default_factory=list)
+    build_args: list[str] = field(default_factory=list)
 
     cachix_cache: str | None = None
 
@@ -226,13 +232,17 @@ async def parse_args(args: list[str]) -> Options:
         "--impure",
         action="store_true",
         default=False,
-        help="Allow impure expressions (default in --file mode)",
+        deprecated=True,
+        help=_deprecated_help("--eval-args=--impure")
+        + "Allow impure expressions (default in --file mode)",
     )
     parser.add_argument(
         "--pure",
         action="store_true",
         default=False,
-        help="Enforce pure evaluation in --file mode (overrides the default impure behavior)",
+        deprecated=True,
+        help=_deprecated_help("--eval-args=--pure")
+        + "Enforce pure evaluation in --file mode (overrides the default impure behavior)",
     )
 
     parser.add_argument(
@@ -244,11 +254,12 @@ async def parse_args(args: list[str]) -> Options:
     )
     parser.add_argument(
         "--option",
-        help="Nix option to set",
+        help=_deprecated_help("--eval-args/--build-args") + "Nix option to set",
         action="append",
         nargs=2,
         metavar=("name", "value"),
         default=[],
+        deprecated=True,
     )
     parser.add_argument(
         "--remote-ssh-option",
@@ -313,14 +324,18 @@ async def parse_args(args: list[str]) -> Options:
     )
     parser.add_argument(
         "--no-link",
-        help="Do not create an out-link for builds (default: false)",
+        help=_deprecated_help("--build-args=--no-link")
+        + "Do not create an out-link for builds (default: false)",
         action="store_true",
         default=False,
+        deprecated=True,
     )
     parser.add_argument(
         "--out-link",
-        help="Name of the out-link for builds (default: result)",
+        help=_deprecated_help("--build-args=--out-link")
+        + "Name of the out-link for builds (default: result)",
         default="result",
+        deprecated=True,
     )
     parser.add_argument(
         "--store",
@@ -394,7 +409,9 @@ async def parse_args(args: list[str]) -> Options:
         action="append",
         nargs=2,
         metavar=("input_path", "flake_url"),
-        help="Override a specific flake input (e.g. `dwarffs/nixpkgs`).",
+        help=_deprecated_help("--eval-args=--override-input")
+        + "Override a specific flake input (e.g. `dwarffs/nixpkgs`).",
+        deprecated=True,
     )
     parser.add_argument(
         "--select",
@@ -412,13 +429,32 @@ async def parse_args(args: list[str]) -> Options:
         "--reference-lock-file",
         type=str,
         default=None,
-        help="Read the given lock file instead of `flake.lock` within the top-level flake.",
+        help=_deprecated_help("--eval-args=--reference-lock-file")
+        + "Read the given lock file instead of `flake.lock` within the top-level flake.",
+        deprecated=True,
     )
     parser.add_argument(
         "--fail-fast",
         action="store_true",
         default=False,
         help="Stop as soon as any build or evaluation fails, instead of continuing with remaining builds.",
+    )
+    parser.add_argument(
+        "--eval-args",
+        type=str,
+        default=None,
+        help="Extra arguments to pass to nix-eval-jobs (split using shlex)",
+    )
+    parser.add_argument(
+        "--build-args",
+        type=str,
+        default=None,
+        help="Extra arguments to pass to nix build (split using shlex)",
+    )
+    parser.add_argument(
+        "build_remainder",
+        nargs="*",
+        help="Extra arguments to pass to nix build (passed after --)",
     )
 
     a = parser.parse_args(args)
@@ -560,4 +596,6 @@ async def parse_args(args: list[str]) -> Options:
         select_expr=a.select,
         reference_lock_file=a.reference_lock_file,
         fail_fast=a.fail_fast,
+        eval_args=shlex.split(a.eval_args or ""),
+        build_args=shlex.split(a.build_args or "") + a.build_remainder,
     )
