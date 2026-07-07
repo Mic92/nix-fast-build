@@ -269,3 +269,25 @@ def test_store_ssh_ng(sshd: Sshd, monkeypatch: pytest.MonkeyPatch) -> None:
         ]
     )
     assert rc == 0
+
+
+def test_passthrough_parsing() -> None:
+    # 1. Test only --eval-args
+    opts = asyncio.run(parse_args(["--eval-args", "--impure --show-trace"]))
+    assert opts.eval_args == ["--impure", "--show-trace"]
+    assert opts.build_args == []
+
+    # 2. Test only --build-args
+    opts = asyncio.run(parse_args(["--build-args", "--dry-run --repair"]))
+    assert opts.build_args == ["--dry-run", "--repair"]
+    assert opts.eval_args == []
+
+    # 3. Test only -- remainder
+    opts = asyncio.run(parse_args(["--", "--dry-run", "--repair"]))
+    assert opts.build_args == ["--dry-run", "--repair"]
+    assert opts.eval_args == []
+
+    # 4. Test both --build-args and -- remainder combined
+    opts = asyncio.run(parse_args(["--build-args=--dry-run", "--", "--repair"]))
+    assert opts.build_args == ["--dry-run", "--repair"]
+    assert opts.eval_args == []

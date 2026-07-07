@@ -63,6 +63,8 @@ class Options:
     select_expr: str | None = None
     fail_fast: bool = False
     reference_lock_file: str | None = None
+    eval_args: list[str] = field(default_factory=list)
+    build_args: list[str] = field(default_factory=list)
 
     cachix_cache: str | None = None
 
@@ -420,6 +422,23 @@ async def parse_args(args: list[str]) -> Options:
         default=False,
         help="Stop as soon as any build or evaluation fails, instead of continuing with remaining builds.",
     )
+    parser.add_argument(
+        "--eval-args",
+        type=str,
+        default=None,
+        help="Extra arguments to pass to nix-eval-jobs (split using shlex)",
+    )
+    parser.add_argument(
+        "--build-args",
+        type=str,
+        default=None,
+        help="Extra arguments to pass to nix build (split using shlex)",
+    )
+    parser.add_argument(
+        "build_remainder",
+        nargs="*",
+        help="Extra arguments to pass to nix build (passed after --)",
+    )
 
     a = parser.parse_args(args)
 
@@ -560,4 +579,6 @@ async def parse_args(args: list[str]) -> Options:
         select_expr=a.select,
         reference_lock_file=a.reference_lock_file,
         fail_fast=a.fail_fast,
+        eval_args=shlex.split(a.eval_args or ""),
+        build_args=shlex.split(a.build_args or "") + a.build_remainder,
     )

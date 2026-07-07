@@ -106,6 +106,7 @@ async def nix_eval_jobs(
         "--workers",
         str(opts.eval_workers),
         *opts.options,
+        *opts.eval_args,
     ]
     if opts.impure:
         args.append("--impure")

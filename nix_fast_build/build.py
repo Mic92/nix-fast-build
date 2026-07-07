@@ -273,6 +273,7 @@ async def nix_build(
             opts.out_link + "-" + attr,
         ]
 
+    args += opts.build_args
     args = maybe_remote(args, opts)
     logger.debug("run %s", shlex.join(args))
 
