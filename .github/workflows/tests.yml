@@ -16,7 +16,7 @@ jobs:
           # Nix Flakes doesn't work on shallow clones
           fetch-depth: 0
       - uses: NixOS/nix-installer-action@main
-      - uses: Mic92/hestia-beta@v2.0.0-beta.1
+      - uses: Mic92/hestia-beta@v2.1.0-beta.3
         with:
           version: v2.0.0-beta.1
       - name: Self-test
@@ -39,7 +39,7 @@ jobs:
           # Nix Flakes doesn't work on shallow clones
           fetch-depth: 0
       - uses: NixOS/nix-installer-action@main
-      - uses: Mic92/hestia-beta@v2.0.0-beta.1
+      - uses: Mic92/hestia-beta@v2.1.0-beta.3
         with:
           version: v2.0.0-beta.1
       - name: Install nix-eval-jobs for remote test
