@@ -30,7 +30,7 @@ async def ensure_stop(
     try:
         yield proc
     finally:
-        if proc.returncode is not None:
+        if proc.returncode is None:
             with contextlib.suppress(ProcessLookupError):
                 proc.send_signal(signal_no)
                 try:
