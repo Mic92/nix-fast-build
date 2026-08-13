@@ -57,7 +57,9 @@ def upload_sources(opts: Options) -> str:
             return url
         if not has_path_inputs:
             # Just copy the flake to the remote machine, we can substitute other inputs there.
-            path = flake_data["path"]
+            path = _run_json(
+                opts.nix_command(["flake", "prefetch", "--json", opts.flake_url])
+            )["storePath"]
             env = os.environ.copy()
             env["NIX_SSHOPTS"] = " ".join(opts.remote_ssh_options)
             assert opts.remote_url
