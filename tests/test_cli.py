@@ -278,6 +278,12 @@ def test_store_implies_no_link() -> None:
     assert opts.out_link is None
 
 
+def test_store_disables_local_builders() -> None:
+    opts = asyncio.run(parse_args(["--store", "ssh-ng://x"]))
+    assert "--builders" in opts.store_args
+    assert opts.store_args[opts.store_args.index("--builders") + 1] == ""
+
+
 def test_default_out_link_is_none() -> None:
     opts = asyncio.run(parse_args([]))
     assert opts.out_link is None
@@ -332,6 +338,7 @@ def test_out_link_creates_result_symlinks(
         ["--out-link", "my-result"],
         ["--option", "store", "ssh-ng://y"],
         ["--option", "eval-store", "local"],
+        ["--option", "builders", "ssh://b"],
     ],
 )
 def test_store_conflicts(extra_args: list[str]) -> None:
@@ -347,13 +354,5 @@ def test_store_ssh_ng(sshd: Sshd, monkeypatch: pytest.MonkeyPatch) -> None:
         f"-p {sshd.port} -i {sshd.key} "
         f"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
     )
-    rc = cli(
-        [
-            "--option",
-            "builders",
-            "",
-            "--store",
-            f"ssh-ng://{login}@127.0.0.1",
-        ]
-    )
+    rc = cli(["--store", f"ssh-ng://{login}@127.0.0.1"])
     assert rc == 0

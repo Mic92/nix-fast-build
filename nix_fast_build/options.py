@@ -105,8 +105,9 @@ class Options:
         """Extra args to point nix build/log at the build store."""
         if self.store is None:
             return []
-        # --eval-store auto ensures nix finds locally-evaluated .drvs
-        return ["--eval-store", "auto", "--store", self.store]
+        # eval-store auto finds locally-evaluated .drvs; empty builders
+        # keeps the client from dispatching to nix.conf remote builders.
+        return ["--eval-store", "auto", "--store", self.store, "--builders", ""]
 
     @property
     def display_name(self) -> str:
@@ -333,7 +334,8 @@ async def parse_args(args: list[str]) -> Options:
         "--store",
         type=str,
         help="Nix store URL to build against (e.g. ssh-ng://host). "
-        "Evaluation stays local; only builds are dispatched. Conflicts with --out-link.",
+        "Evaluation stays local and only builds are dispatched. "
+        "Implies --builders ''. Conflicts with --out-link.",
     )
     parser.add_argument(
         "--remote",
@@ -447,8 +449,8 @@ async def parse_args(args: list[str]) -> Options:
         for value, flag in conflicts:
             if value:
                 parser.error(f"{flag} cannot be used with --store")
-        if any(name in ("store", "eval-store") for name, _ in a.option):
-            parser.error("--option store/eval-store conflicts with --store")
+        if any(name in ("store", "eval-store", "builders") for name, _ in a.option):
+            parser.error("--option store/eval-store/builders conflicts with --store")
 
     if a.no_link:
         logger.warning(
