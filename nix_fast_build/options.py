@@ -60,6 +60,8 @@ class Options:
     out_link: str | None = None
     # Set at runtime; roots vanish with the run's temp dir
     build_gcroot_dir: Path | None = None
+    # Local counterpart for --remote: roots downloaded outputs
+    download_gcroot_dir: Path | None = None
     stream_json_lines: bool = False
     result_format: ResultFormat = ResultFormat.JSON
     result_file: Path | None = None

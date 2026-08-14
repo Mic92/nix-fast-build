@@ -86,6 +86,7 @@ def start_renderer(stack: AsyncExitStack, opts: Options) -> CIRenderer | TTYRend
 async def run(stack: AsyncExitStack, opts: Options) -> int:
     if opts.remote:
         tmp_dir = await stack.enter_async_context(remote_temp_dir(opts))
+        opts.download_gcroot_dir = Path(stack.enter_context(TemporaryDirectory()))
     else:
         tmp_dir = Path(stack.enter_context(TemporaryDirectory()))
 

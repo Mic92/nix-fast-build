@@ -202,6 +202,26 @@ def test_flake_and_expr_mutually_exclusive() -> None:
     assert e.value.code == 2
 
 
+def remote_args(sshd: Sshd) -> list[str]:
+    login = pwd.getpwuid(os.getuid()).pw_name
+    return [
+        "--remote",
+        f"{login}@127.0.0.1",
+        "--remote-ssh-option",
+        "Port",
+        str(sshd.port),
+        "--remote-ssh-option",
+        "IdentityFile",
+        sshd.key,
+        "--remote-ssh-option",
+        "StrictHostKeyChecking",
+        "no",
+        "--remote-ssh-option",
+        "UserKnownHostsFile",
+        "/dev/null",
+    ]
+
+
 def test_remote(sshd: Sshd) -> None:
     login = pwd.getpwuid(os.getuid()).pw_name
     rc = cli(
@@ -226,6 +246,31 @@ def test_remote(sshd: Sshd) -> None:
         ]
     )
     assert rc == 0
+
+
+def test_remote_out_link_creates_local_symlinks(
+    sshd: Sshd, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    flake = TEST_ROOT.parent
+    monkeypatch.chdir(tmp_path)
+    rc = cli(
+        [
+            "--option",
+            "builders",
+            "",
+            "--flake",
+            f"{flake}#checks",
+            "--out-link",
+            "result",
+            *remote_args(sshd),
+        ]
+    )
+    assert rc == 0
+    links = [p for p in tmp_path.iterdir() if p.name.startswith("result-")]
+    assert links
+    for link in links:
+        assert link.is_symlink()
+        assert link.readlink().exists()
 
 
 def test_store_implies_no_link() -> None:
