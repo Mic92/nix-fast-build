@@ -89,6 +89,8 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     else:
         tmp_dir = Path(stack.enter_context(TemporaryDirectory()))
 
+    opts.build_gcroot_dir = tmp_dir
+
     # Renderer first: from here on all terminal output (including log
     # records and eval stderr) must go through it.
     renderer = start_renderer(stack, opts)

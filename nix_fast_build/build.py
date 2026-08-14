@@ -265,13 +265,14 @@ async def nix_build(
         ["build", f"{installable}^*", "--keep-going", *opts.options, *opts.store_args]
     )
     args += ["--log-format", "internal-json", "-v"]
-    if opts.no_link:
+    if opts.store is not None:
+        # outputs live in a remote store, a local out-link would dangle
         args += ["--no-link"]
+    elif opts.out_link is not None:
+        args += ["--out-link", opts.out_link + "-" + attr]
     else:
-        args += [
-            "--out-link",
-            opts.out_link + "-" + attr,
-        ]
+        assert opts.build_gcroot_dir is not None
+        args += ["--out-link", str(opts.build_gcroot_dir / f"result-{attr}")]
 
     args = maybe_remote(args, opts)
     logger.debug("run %s", shlex.join(args))

@@ -31,7 +31,11 @@ esac
         async with AsyncExitStack() as stack:
             return await build.build(
                 stack,
-                Options(nix_bin=[str(fake_nix)], retries=retries, no_link=True),
+                Options(
+                    nix_bin=[str(fake_nix)],
+                    retries=retries,
+                    build_gcroot_dir=tmp_path,
+                ),
             )
         # Unreachable; mypy can't tell AsyncExitStack never suppresses here.
         raise AssertionError
