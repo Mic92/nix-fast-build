@@ -85,6 +85,7 @@ async def run_builds(
     build_queue: JobQueue,
     optional_queues: list[BuildQueue],
     result_queue: "Queue[Result | None]",
+    *,
     opts: Options,
     renderer: Renderer | None = None,
 ) -> int:

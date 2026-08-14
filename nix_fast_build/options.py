@@ -89,7 +89,7 @@ class Options:
         return _nix_command(self.nix_bin, args)
 
     @property
-    def remote_url(self) -> None | str:
+    def remote_url(self) -> str | None:
         if self.remote is None:
             return None
         return f"ssh://{self.remote}"

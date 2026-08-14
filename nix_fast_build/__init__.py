@@ -196,7 +196,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                     build_queue,
                     [oq.queue for oq in optional_queues],
                     result_queue,
-                    opts,
+                    opts=opts,
                     renderer=renderer,
                 ),
                 name=f"build-{i}",
