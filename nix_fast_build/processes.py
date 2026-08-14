@@ -36,7 +36,7 @@ async def ensure_stop(
                 try:
                     await asyncio.wait_for(proc.wait(), timeout=wait_timeout)
                 except TimeoutError:
-                    print(
+                    print(  # noqa: T201 last-resort diagnostics during shutdown
                         f"Failed to stop process {shlex.join(cmd)}. Killing it.",
                         file=sys.stderr,
                     )

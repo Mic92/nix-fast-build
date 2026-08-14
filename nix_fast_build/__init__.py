@@ -175,7 +175,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             if result is None:
                 return
             if opts.stream_json_lines:
-                print(json.dumps(result.as_dict()), flush=True)
+                print(json.dumps(result.as_dict()), flush=True)  # noqa: T201 machine-readable output stream
             results.append(result)
 
     async with TaskGroup() as tg:

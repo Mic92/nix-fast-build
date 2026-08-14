@@ -110,6 +110,5 @@ lint.ignore = [
   "C901",
 
   "E501", # line too long
-  "T201", # `print` found
   "PLR2004", # Magic value used in comparison
 ]
