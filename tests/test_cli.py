@@ -230,7 +230,50 @@ def test_remote(sshd: Sshd) -> None:
 
 def test_store_implies_no_link() -> None:
     opts = asyncio.run(parse_args(["--store", "ssh-ng://x"]))
-    assert opts.no_link is True
+    assert opts.out_link is None
+
+
+def test_default_out_link_is_none() -> None:
+    opts = asyncio.run(parse_args([]))
+    assert opts.out_link is None
+
+
+def test_no_link_is_deprecated_noop() -> None:
+    opts = asyncio.run(parse_args(["--no-link"]))
+    assert opts.out_link is None
+
+
+def test_default_creates_no_result_symlinks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    flake = TEST_ROOT.parent
+    monkeypatch.chdir(tmp_path)
+    rc = cli(["--option", "builders", "", "--flake", f"{flake}#checks"])
+    assert rc == 0
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_out_link_creates_result_symlinks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    flake = TEST_ROOT.parent
+    monkeypatch.chdir(tmp_path)
+    rc = cli(
+        [
+            "--option",
+            "builders",
+            "",
+            "--flake",
+            f"{flake}#checks",
+            "--out-link",
+            "result",
+        ]
+    )
+    assert rc == 0
+    links = [p for p in tmp_path.iterdir() if p.name.startswith("result-")]
+    assert links
+    for link in links:
+        assert link.is_symlink()
 
 
 @pytest.mark.parametrize(
