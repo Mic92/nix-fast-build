@@ -72,7 +72,9 @@ target-version = "py311"
 line-length = 88
 lint.select = ["ALL"]
 # White-box tests may exercise private helpers directly.
-lint.per-file-ignores."tests/*" = ["SLF001"]
+# SLF001: white-box tests exercise private helpers; FBT001: pytest.parametrize
+# passes fixture values positionally.
+lint.per-file-ignores."tests/*" = ["SLF001", "FBT001"]
 lint.ignore = [
   # pydocstyle
   "D",
@@ -87,8 +89,6 @@ lint.ignore = [
   "ANN401",
   # Trailing comma missing
   "COM812",
-  # Boolean-typed positional argument in function definition
-  "FBT001",
   # Logging statement uses f-string
   "G004",
   # disabled on ruff's recommendation as causes problems with the formatter

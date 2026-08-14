@@ -481,7 +481,7 @@ class TTYRenderer:
         running = b in self.running
         return (f"{b.phase or 'build'}, running" if running else "failed", running)
 
-    def _dump_log(self, b: BuildOutput, state: str, running: bool) -> None:
+    def _dump_log(self, b: BuildOutput, state: str, *, running: bool) -> None:
         self.display.permanent(
             f"{DIM}────── log: {b.attr} ({state}, {fmt_duration(b.elapsed())}) ──────{RESET}",
             *(f"{DIM}{b.attr}>{RESET} {line}" for line in b.lines),
@@ -491,7 +491,7 @@ class TTYRenderer:
         )
 
     @staticmethod
-    def _pager_cmd(b: BuildOutput, state: str, running: bool) -> list[str]:
+    def _pager_cmd(b: BuildOutput, state: str, *, running: bool) -> list[str]:
         pager = shlex.split(os.environ.get("PAGER", "less"))
         if Path(pager[0]).name == "less":
             # Title in the prompt line so the user knows what they're reading.
@@ -510,7 +510,7 @@ class TTYRenderer:
             tf.writelines(f"{b.attr}> {line}\n" for line in b.lines)
             return Path(tf.name)
 
-    async def _page_log(self, b: BuildOutput, state: str, running: bool) -> None:
+    async def _page_log(self, b: BuildOutput, state: str, *, running: bool) -> None:
         path = self._write_log_tmpfile(b, state)
         written = b.total_lines
 
@@ -556,7 +556,7 @@ class TTYRenderer:
         proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
-                *self._pager_cmd(b, state, running), path, env=env
+                *self._pager_cmd(b, state, running=running), path, env=env
             )
             await proc.wait()
         finally:
@@ -668,7 +668,7 @@ class TTYRenderer:
         state, running = self._state_label(b)
         self.last_viewed = b
         if self.dump_action:
-            self._dump_log(b, state, running)
+            self._dump_log(b, state, running=running)
             self.flash(f"dumped {len(b.lines)} lines ↑")
             return
         if self.pager_active:
@@ -677,7 +677,7 @@ class TTYRenderer:
             return
         # Claim the pager synchronously, before _page_log gets scheduled.
         self.pager_active = True
-        task = asyncio.create_task(self._page_log(b, state, running))
+        task = asyncio.create_task(self._page_log(b, state, running=running))
         self.bg_tasks.add(task)
 
         def on_done(t: asyncio.Task[None]) -> None:

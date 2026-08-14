@@ -74,7 +74,7 @@ def start_renderer(stack: AsyncExitStack, opts: Options) -> CIRenderer | TTYRend
         return tty_renderer
     ci_renderer = CIRenderer(
         sys.stderr,
-        color=want_color(sys.stderr.isatty()),
+        color=want_color(isatty=sys.stderr.isatty()),
         fold=fold_markers() and not opts.no_fold,
         stall_timeout=opts.stall_timeout,
     )
