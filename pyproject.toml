@@ -72,7 +72,9 @@ target-version = "py311"
 line-length = 88
 lint.select = ["ALL"]
 # White-box tests may exercise private helpers directly.
-lint.per-file-ignores."tests/*" = ["SLF001"]
+# SLF001: white-box tests exercise private helpers; FBT001: pytest.parametrize
+# passes fixture values positionally.
+lint.per-file-ignores."tests/*" = ["SLF001", "FBT001"]
 lint.ignore = [
   # pydocstyle
   "D",
@@ -80,17 +82,13 @@ lint.ignore = [
   "TD",
   # fixmes
   "FIX",
+  # copyright notices
+  "CPY",
 
-  # Missing type annotation for `self` in method
-  "ANN101",
   # Dynamically typed expressions (typing.Any)
   "ANN401",
   # Trailing comma missing
   "COM812",
-  # Unnecessary `dict` call (rewrite as a literal)
-  "C408",
-  # Boolean-typed positional argument in function definition
-  "FBT001",
   # Logging statement uses f-string
   "G004",
   # disabled on ruff's recommendation as causes problems with the formatter
@@ -112,6 +110,5 @@ lint.ignore = [
   "C901",
 
   "E501", # line too long
-  "T201", # `print` found
   "PLR2004", # Magic value used in comparison
 ]

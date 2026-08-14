@@ -74,7 +74,7 @@ def start_renderer(stack: AsyncExitStack, opts: Options) -> CIRenderer | TTYRend
         return tty_renderer
     ci_renderer = CIRenderer(
         sys.stderr,
-        color=want_color(sys.stderr.isatty()),
+        color=want_color(isatty=sys.stderr.isatty()),
         fold=fold_markers() and not opts.no_fold,
         stall_timeout=opts.stall_timeout,
     )
@@ -175,7 +175,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
             if result is None:
                 return
             if opts.stream_json_lines:
-                print(json.dumps(result.as_dict()), flush=True)
+                print(json.dumps(result.as_dict()), flush=True)  # noqa: T201 machine-readable output stream
             results.append(result)
 
     async with TaskGroup() as tg:
@@ -196,7 +196,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                     build_queue,
                     [oq.queue for oq in optional_queues],
                     result_queue,
-                    opts,
+                    opts=opts,
                     renderer=renderer,
                 ),
                 name=f"build-{i}",

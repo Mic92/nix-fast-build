@@ -119,7 +119,7 @@ def trunc_middle(s: str, n: int) -> str:
     return s[:half] + "…" + s[-(n - 1 - half) :]
 
 
-def want_color(isatty: bool) -> bool:
+def want_color(*, isatty: bool) -> bool:
     """Color decision: NO_COLOR > CLICOLOR_FORCE/FORCE_COLOR > isatty.
 
     Actions CI counts as color-capable: its log viewer renders ANSI,

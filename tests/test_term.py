@@ -103,7 +103,7 @@ def test_want_color(
         monkeypatch.delenv(var, raising=False)
     for k, v in env.items():
         monkeypatch.setenv(k, v)
-    assert want_color(isatty) is expected
+    assert want_color(isatty=isatty) is expected
 
 
 def test_fold_markers(monkeypatch: pytest.MonkeyPatch) -> None:
