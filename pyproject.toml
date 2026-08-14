@@ -87,8 +87,6 @@ lint.ignore = [
   "ANN401",
   # Trailing comma missing
   "COM812",
-  # Unnecessary `dict` call (rewrite as a literal)
-  "C408",
   # Boolean-typed positional argument in function definition
   "FBT001",
   # Logging statement uses f-string

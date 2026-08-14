@@ -85,7 +85,7 @@ def sshd(sshd_config: SshdConfig, command: Command, ports: Ports) -> Iterator[Ss
     if sshd_config.preload_lib is not None:
         bash = shutil.which("bash")
         assert bash is not None
-        env = dict(LD_PRELOAD=str(sshd_config.preload_lib), LOGIN_SHELL=bash)
+        env = {"LD_PRELOAD": str(sshd_config.preload_lib), "LOGIN_SHELL": bash}
     proc = command.run(
         [sshd, "-f", sshd_config.path, "-D", "-p", str(port)], extra_env=env
     )
