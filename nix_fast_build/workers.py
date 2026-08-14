@@ -67,8 +67,12 @@ async def run_evaluation(
         # them for pushing if they are cached locally
         elif cache_status == "cached":
             continue
-        elif cache_status == "local" and upload_queue is not None:
-            upload_queue.put_nowait(Build(attr, job["drvPath"], _job_outputs(job)))
+        elif cache_status == "local":
+            if upload_queue is not None:
+                upload_queue.put_nowait(Build(attr, job["drvPath"], _job_outputs(job)))
+            # already valid locally: build only if a result symlink is wanted
+            if opts.out_link is None:
+                continue
         system = job.get("system")
         if system and system not in opts.systems:
             continue
