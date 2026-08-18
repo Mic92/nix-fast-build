@@ -61,6 +61,11 @@ def test_build_json() -> None:
         for result in build_results:
             assert "outputs" in result
             assert result["outputs"]
+        eval_results = [r for r in data["results"] if r["type"] == "EVAL"]
+        assert eval_results
+        for result in eval_results:
+            assert result["outputs"]
+            assert result["drvPath"].endswith(".drv")
         assert rc == 0
 
 
