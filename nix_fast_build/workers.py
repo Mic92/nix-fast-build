@@ -45,6 +45,10 @@ async def run_evaluation(
             raise Error(msg) from e
         error = job.get("error")
         attr = job.get("attr", "unknown-attribute")
+        cache_status = job.get("cacheStatus")
+        if cache_status is None and job.get("isCached", False):
+            cache_status = "cached"
+        outputs = _job_outputs(job)
         await result_queue.put(
             Result(
                 result_type=ResultType.EVAL,
@@ -53,23 +57,21 @@ async def run_evaluation(
                 # TODO: maybe add this to nix-eval-jobs?
                 duration=0.0,
                 error=error,
+                outputs=outputs or None,
+                drv_path=job.get("drvPath"),
+                cache_status=cache_status,
             )
         )
         if error:
             opts.signal_stop()
             continue
-        cache_status = job.get("cacheStatus")
-        if cache_status is None:
-            # Legacy attribute
-            if job.get("isCached", False):
-                continue
         # Skip remotely cached jobs, but still consider
         # them for pushing if they are cached locally
-        elif cache_status == "cached":
+        if cache_status == "cached":
             continue
-        elif cache_status == "local":
+        if cache_status == "local":
             if upload_queue is not None:
-                upload_queue.put_nowait(Build(attr, job["drvPath"], _job_outputs(job)))
+                upload_queue.put_nowait(Build(attr, job["drvPath"], outputs))
             # already valid locally: build only if a result symlink is wanted
             if opts.out_link is None:
                 continue
@@ -80,7 +82,7 @@ async def run_evaluation(
         if not drv_path:
             msg = f"nix-eval-jobs did not return a drvPath: {line.decode()}"
             raise Error(msg)
-        build_queue.put_nowait(Job(attr, drv_path, _job_outputs(job)))
+        build_queue.put_nowait(Job(attr, drv_path, outputs))
     return await eval_proc.wait()
 
 

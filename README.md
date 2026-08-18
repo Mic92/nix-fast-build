@@ -287,7 +287,10 @@ cat ./result.json
        "duration": 0.0,
        "error": null,
        "success": true,
-       "type": "EVAL"
+       "type": "EVAL",
+       "outputs": {"out": "/nix/store/..."},
+       "drvPath": "/nix/store/...-package-default.drv",
+       "cacheStatus": "notBuilt"
      },
 # ...
 ```
@@ -311,7 +314,7 @@ error, so stdout contains only JSON Lines. This implies `--no-nom`.
 
 ```console
 nix-fast-build --stream-json-lines
-{"type": "EVAL", "attr": "x86_64-linux.package-default", "success": true, "duration": 0.0, "error": null}
+{"type": "EVAL", "attr": "x86_64-linux.package-default", "success": true, "duration": 0.0, "error": null, "outputs": {"out": "/nix/store/..."}, "drvPath": "/nix/store/...drv", "cacheStatus": "notBuilt"}
 {"type": "BUILD", "attr": "x86_64-linux.package-default", "success": true, "duration": 1.2, "error": null, "outputs": {"out": "/nix/store/..."}}
 ```
 

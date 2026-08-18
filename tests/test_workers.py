@@ -57,3 +57,23 @@ def test_local_cache_status_skips_build() -> None:
 def test_local_cache_status_builds_when_out_link_requested() -> None:
     build_queue, _ = _eval(Options(systems={"x86_64-linux"}, out_link="result"))
     assert build_queue.qsize() == 1
+
+
+def test_eval_result_reports_outputs_and_drv_path() -> None:
+    result_queue: asyncio.Queue[Result | None] = asyncio.Queue()
+    asyncio.run(
+        run_evaluation(
+            FakeEvalProc([{**JOB, "cacheStatus": "cached"}]),  # type: ignore[arg-type]
+            JobQueue(),
+            None,
+            result_queue,
+            Options(systems={"x86_64-linux"}),
+        )
+    )
+    result = result_queue.get_nowait()
+    assert result is not None
+    data = result.as_dict()
+    assert data["type"] == "EVAL"
+    assert data["outputs"] == {"out": "/nix/store/aaa-foo"}
+    assert data["drvPath"] == "/nix/store/aaa-foo.drv"
+    assert data["cacheStatus"] == "cached"

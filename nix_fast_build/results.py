@@ -21,6 +21,8 @@ class Result:
     error: str | None
     log_output: str | None = None
     outputs: dict[str, str] | None = None
+    drv_path: str | None = None
+    cache_status: str | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -30,6 +32,12 @@ class Result:
             "duration": self.duration,
             "error": self.error,
             **({"outputs": self.outputs} if self.outputs is not None else {}),
+            **({"drvPath": self.drv_path} if self.drv_path is not None else {}),
+            **(
+                {"cacheStatus": self.cache_status}
+                if self.cache_status is not None
+                else {}
+            ),
         }
 
 
