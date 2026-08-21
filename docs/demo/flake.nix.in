@@ -1,0 +1,25 @@
+{
+  description = "nix-fast-build TUI demo: a few fake checks, one of them failing";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  outputs =
+    { nixpkgs, ... }:
+    let
+      pkgs = nixpkgs.legacyPackages.@system@;
+      mk = name: script: pkgs.runCommand name { nonce = "@nonce@"; } script;
+    in
+    {
+      checks.@system@ = {
+        format = mk "format" "echo checking format...; sleep 3; touch $out";
+        lint = mk "lint" "echo linting...; sleep 9; touch $out";
+        unit-tests = mk "unit-tests" "echo running 42 tests; sleep 18; touch $out";
+        integration = mk "integration" ''
+          echo "starting integration tests"
+          echo "test_login ... ok"
+          echo "test_signup ... ok"
+          echo "test_checkout ... FAILED"
+          echo "AssertionError: expected status 200, got 500"
+          exit 1
+        '';
+      };
+    };
+}
