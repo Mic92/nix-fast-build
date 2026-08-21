@@ -14,6 +14,8 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
+import select
 import shlex
 import shutil
 import signal
@@ -49,6 +51,28 @@ EXTRACT_LINES = 5  # failure extract printed to scrollback
 ARROW_KEYS = {b"A": "k", b"B": "j", b"C": "n", b"D": "p"}
 
 
+def cursor_row(out: IO[str], rows: int) -> int:
+    """Current cursor row via a CPR query, so the live region can start
+    right below the shell prompt instead of at the bottom of the screen."""
+    if not (sys.stdin.isatty() and out.isatty()):
+        return rows
+    fd = sys.stdin.fileno()
+    saved = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)
+        out.write(f"{CSI}6n")
+        out.flush()
+        reply = ""
+        while not reply.endswith("R"):
+            if not select.select([fd], [], [], 0.2)[0]:
+                return rows
+            reply += os.read(fd, 32).decode(errors="replace")
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+    match = re.search(r"\[(\d+);\d+R", reply)
+    return int(match.group(1)) if match else rows
+
+
 class DisplayLogHandler(logging.Handler):
     """Routes log records through the display.
 
@@ -71,18 +95,33 @@ class Mode(Enum):
 
 
 class Display:
-    """Owns the terminal: permanent scrollback lines + ephemeral region.
+    """Scrollback for permanent lines plus a live region redrawn in place.
 
-    Flicker avoidance: every update is composed into one buffer and emitted
-    with a single write, wrapped in the synchronized-output escape (DEC 2026)
-    so capable terminals paint it atomically. Ephemeral lines are overwritten
-    in place with clear-to-EOL instead of erasing the whole region first.
+    The region floats below the last permanent line until the output
+    reaches the bottom; from then on permanent lines scroll inside a
+    DECSTBM margin above it, so wrapped or bursty output cannot corrupt
+    the region by construction. Resizes are detected by polling size()
+    every frame: during a resize nothing is erased, once the size settles
+    the screen is rebuilt from history. Every update is one write wrapped
+    in DEC 2026 so capable terminals paint it atomically.
     """
 
-    def __init__(self, out: IO[str]) -> None:
+    def __init__(
+        self,
+        out: IO[str],
+        size: Callable[[], os.terminal_size] = shutil.get_terminal_size,
+        origin: int = 1,
+    ) -> None:
         self.out = out
-        self.ephemeral_lines = 0
-        self.last_ephemeral: list[str] = []
+        self.size = size
+        self.row = origin  # row the next permanent line goes to
+        self.top = origin  # first row of the drawn region
+        self.margin = 0  # bottom row of the DECSTBM margin, 0 = none
+        self.cols = 0
+        self.rows = 0
+        self.resizing = False  # size changed within the last frame
+        self.history: deque[str] = deque(maxlen=1000)  # for resize rebuild
+        self.last_region: list[str] = []
         self.suspended = False
         self._pending: list[str] = []  # permanent lines queued while suspended
 
@@ -90,42 +129,79 @@ class Display:
         self.out.write(f"{CSI}?2026h{buf}{CSI}?2026l")
         self.out.flush()
 
-    def _compose_ephemeral(self, lines: list[str]) -> str:
-        """Cursor sits below old region; overwrite it line by line."""
-        width = shutil.get_terminal_size().columns
-        buf = f"{CSI}{self.ephemeral_lines}F" if self.ephemeral_lines else ""
-        for line in lines:
-            # Cell-aware clip (CJK/emoji count as 2): an overwide line would
-            # wrap and break the cursor-up math for the whole region.
-            # RESET re-applied because the clip may drop a trailing reset.
-            buf += f"{clip_ansi(line, width)}{RESET}{CSI}K\n"
-        if len(lines) < self.ephemeral_lines:
-            buf += f"{CSI}J"  # old region was taller: drop leftover lines
-        self.ephemeral_lines = len(lines)
-        self.last_ephemeral = lines
-        return buf
+    def frame(self, permanent: list[str], region: list[str]) -> None:
+        """One atomic update: append permanent lines, redraw the region."""
+        cols, rows = self.size()
+        region = region[: max(rows - 2, 1)]
+        limit = rows - len(region)  # last row permanent lines may occupy
+        buf = HIDE_CURSOR
+        self.history.extend(permanent)
+        if (cols, rows) != (self.cols, self.rows):
+            # Resize in progress: absolute rows are unreliable, so release
+            # the margin, erase nothing and skip the region until it settles.
+            buf += f"{CSI}r"
+            self.margin = 0
+            self.resizing = self.rows != 0
+            self.cols, self.rows = cols, rows
+            self.row = min(self.row, rows)
+        elif self.resizing:
+            # Size settled: rebuild the visible screen from history.
+            self.resizing = False
+            buf += f"{CSI}2J{CSI}1;1H"
+            tail = list(self.history)[-(limit - 1) :] if limit > 1 else []
+            buf += "".join(
+                f"{CSI}{i + 1};1H{line}{CSI}K" for i, line in enumerate(tail)
+            )
+            self.row = len(tail) + 1
+            permanent = []
+        if not self.resizing and self.row > limit + 1:
+            # Region grew: scroll the flow area up to make room.
+            buf += self._set_margin(limit)
+            buf += f"{CSI}{limit};1H" + "\n" * (self.row - limit - 1)
+            self.row = limit + 1
+        for line in permanent:
+            if self.row <= limit:
+                buf += f"{CSI}{self.row};1H{line}{CSI}K"
+                self.row += 1
+            else:
+                buf += self._set_margin(limit)
+                buf += f"{CSI}{limit};1H\n\r{line}{CSI}K"
+        self.top = min(self.row, limit + 1)
+        if not self.resizing:
+            for i, line in enumerate(region):
+                # clip_ansi: an overwide line would wrap into the next row.
+                buf += f"{CSI}{self.top + i};1H{clip_ansi(line, cols)}{RESET}{CSI}K"
+            buf += f"{CSI}J"  # stale rows under a moved or shrunk region
+        buf += f"{CSI}{self.top};1H"
+        self._emit(buf)
+
+    def _set_margin(self, limit: int) -> str:
+        if self.margin == limit:
+            return ""
+        self.margin = limit
+        return f"{CSI}r{CSI}1;{limit}r"
+
+    def close(self) -> None:
+        """Release the margin and clear the region."""
+        self._emit(f"{CSI}r{CSI}{self.top};1H{CSI}J")
+        self.margin = 0
 
     def permanent(self, *lines: str) -> None:
-        if self.suspended:
-            # Another program (pager) owns the terminal: queue for later.
+        if self.suspended:  # a pager owns the terminal: queue for later
             self._pending.extend(lines)
             return
-        # Erase ephemeral, print permanent lines, repaint ephemeral: one write.
-        buf = f"{CSI}{self.ephemeral_lines}F{CSI}J" if self.ephemeral_lines else ""
-        self.ephemeral_lines = 0
-        buf += "".join(f"{line}\n" for line in lines)
-        buf += self._compose_ephemeral(self.last_ephemeral)
-        self._emit(buf)
+        self.frame(list(lines), self.last_region)
 
     def ephemeral(self, lines: list[str]) -> None:
         if self.suspended:
             return
-        self._emit(self._compose_ephemeral(lines))
+        self.last_region = list(lines)
+        self.frame([], lines)
 
     def suspend(self) -> None:
         """Clear our region and stop touching the terminal."""
-        self.ephemeral([])
-        self.last_ephemeral = []
+        self.close()
+        self.last_region = []
         self.suspended = True
 
     def resume(self) -> int:
@@ -135,8 +211,10 @@ class Display:
         user what they missed.
         """
         self.suspended = False
-        # The pager left the cursor anywhere; start fresh on a new line.
-        self.ephemeral_lines = 0
+        # Pager left the screen in an unknown state: rebuild from history
+        # on the next frame, exactly like after a resize settles.
+        self.cols, self.rows = self.size()
+        self.resizing = True
         pending, self._pending = self._pending, []
         if pending:
             self.permanent(*pending)
@@ -235,6 +313,9 @@ class TTYRenderer:
         self.cooked_termios = termios.tcgetattr(fd)
         tty.setcbreak(fd)
         loop.add_reader(fd, self.on_stdin_readable)
+        # Start the region below the shell prompt instead of at row 1.
+        rows = shutil.get_terminal_size().lines
+        self.display.row = self.display.top = cursor_row(self.display.out, rows)
         # Hide the cursor: it strobes across the region during redraws.
         self._write_ctl(HIDE_CURSOR)
         loop.add_signal_handler(signal.SIGWINCH, self._on_winch)
@@ -286,6 +367,7 @@ class TTYRenderer:
         self.display.ephemeral([])
         # Live region is gone; leave a permanent recap in scrollback.
         self.display.permanent(self.render_summary())
+        self.display.close()
         self._write_ctl(SHOW_CURSOR)
 
     def _write_ctl(self, seq: str) -> None:
@@ -293,10 +375,10 @@ class TTYRenderer:
         self.display.out.flush()
 
     def _on_winch(self) -> None:
-        # Terminal resized: old region may have rewrapped, making the
-        # cursor-up anchor wrong. Abandon it (stale lines become inert
-        # scrollback) and let the next tick draw a fresh region.
-        self.display.ephemeral_lines = 0
+        # Repaint immediately instead of waiting for the next tick; the
+        # display's per-frame size polling does the rest.
+        if not self.pager_active:
+            self.display.frame([], self.display.last_region)
 
     async def _render_loop(self) -> None:
         while True:

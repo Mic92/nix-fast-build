@@ -4,6 +4,7 @@ import logging
 import os
 import re
 
+import pyte
 import pytest
 
 from nix_fast_build import tty_renderer
@@ -44,47 +45,201 @@ def plain(lines: list[str]) -> str:
     return ANSI.sub("", "\n".join(lines))
 
 
-# ── Display ──────────────────────────────────────────────────────────
+# ── Display (against a pyte terminal emulator) ───────────────────────
+
+WIDTH, HEIGHT = 60, 12
 
 
-def test_display_ephemeral_overwrites_in_place() -> None:
+def emulate(chunks: str) -> pyte.HistoryScreen:
+    screen = pyte.HistoryScreen(WIDTH, HEIGHT, history=1000)
+    pyte.Stream(screen).feed(chunks)
+    return screen
+
+
+def buffer_lines(screen: pyte.HistoryScreen) -> list[str]:
+    """Scrollback plus visible rows, as plain text."""
+    history = [
+        "".join(line[x].data for x in range(WIDTH)).rstrip()
+        for line in screen.history.top
+    ]
+    return history + [row.rstrip() for row in screen.display]
+
+
+def make_display(out: io.StringIO) -> Display:
+    return Display(out, size=lambda: os.terminal_size((WIDTH, HEIGHT)))
+
+
+def test_verdicts_scroll_and_region_stays_at_bottom() -> None:
+    """Verdicts land in scrollback exactly once and in order, while the
+    live region only ever exists as the last rows of the screen."""
     out = io.StringIO()
-    d = Display(out)
-    d.ephemeral(["a", "b"])
-    d.ephemeral(["c"])
-    text = out.getvalue()
-    # Second paint moves up 2 lines, then clears the leftover line.
-    assert f"{CSI}2F" in text
-    assert f"{CSI}J" in text
-    assert d.ephemeral_lines == 1
+    display = make_display(out)
+    verdicts = []
+    for i in range(40):
+        batch = [f"verdict-{i}-a", f"verdict-{i}-b"]
+        verdicts += batch
+        display.frame(batch, ["HEADER", f"running-{i}", f"gist-{i}"])
+    display.close()
+
+    lines = buffer_lines(emulate(out.getvalue()))
+    kept = [line for line in lines if line.startswith("verdict-")]
+    assert kept == verdicts
+    assert sum("HEADER" in line for line in lines) == 0  # cleared on close
+
+
+def test_region_visible_while_running() -> None:
+    out = io.StringIO()
+    display = make_display(out)
+    for i in range(20):
+        display.frame([f"verdict-{i}"], ["HEADER", f"running-{i}"])
+
+    screen = emulate(out.getvalue())
+    lines = buffer_lines(screen)
+    # The region exists exactly once, at the bottom of the visible screen.
+    assert sum("HEADER" in line for line in lines) == 1
+    visible = [row.rstrip() for row in screen.display]
+    assert "HEADER" in visible[-2]
+    assert visible[-1] == "running-19"
+    # No verdict was lost or duplicated by the region redraws.
+    kept = [line for line in lines if line.startswith("verdict-")]
+    assert kept == [f"verdict-{i}" for i in range(20)]
+
+
+def test_region_growth_does_not_eat_verdicts() -> None:
+    """Reserving more bottom rows must not overwrite existing verdicts."""
+    out = io.StringIO()
+    display = make_display(out)
+    display.frame(["verdict-0"], ["HEADER"])
+    display.frame(["verdict-1"], ["HEADER", "run-a", "run-b", "run-c"])
+    display.frame([], ["HEADER"])
+    display.close()
+
+    lines = buffer_lines(emulate(out.getvalue()))
+    kept = [line for line in lines if line.startswith("verdict-")]
+    assert kept == ["verdict-0", "verdict-1"]
+    assert sum("run-a" in line for line in lines) == 0
+
+
+def test_region_starts_at_the_prompt_row_without_a_gap() -> None:
+    """Output continues right below the shell prompt instead of jumping
+    to the bottom of the screen."""
+    out = io.StringIO()
+    display = Display(out, size=lambda: os.terminal_size((WIDTH, HEIGHT)), origin=4)
+    display.frame(["verdict-0", "verdict-1"], ["HEADER", "running"])
+
+    visible = [row.rstrip() for row in emulate(out.getvalue()).display]
+    assert visible[3:7] == ["verdict-0", "verdict-1", "HEADER", "running"]
+    assert all(not row for row in visible[7:])
+
+
+def test_resize_keeps_single_region() -> None:
+    """A SIGWINCH shows up as a changed size() result on the next frame.
+    The renderer must re-anchor the region without duplicating it."""
+    size = {"cols": WIDTH, "rows": HEIGHT}
+    out = io.StringIO()
+    display = Display(out, size=lambda: os.terminal_size((size["cols"], size["rows"])))
+    screen = pyte.HistoryScreen(WIDTH, HEIGHT, history=1000)
+    stream = pyte.Stream(screen)
+
+    def frame(batch: list[str], region: list[str]) -> None:
+        mark = out.tell()
+        display.frame(batch, region)
+        stream.feed(out.getvalue()[mark:])
+
+    for i in range(10):
+        frame([f"verdict-{i}"], ["HEADER", f"running-{i}"])
+    # The terminal shrinks between two frames.
+    size.update(cols=40, rows=8)
+    screen.resize(8, 40)
+    for i in range(10, 16):
+        frame([f"verdict-{i}"], ["HEADER", f"running-{i}"])
+
+    lines = buffer_lines(screen)
+    assert sum("HEADER" in line for line in lines) == 1
+    visible = [row.rstrip() for row in screen.display]
+    assert "HEADER" in visible[-2]
+    assert visible[-1] == "running-15"
+    # Verdicts printed after the resize are neither lost nor duplicated.
+    post = [
+        line for line in lines if line.startswith("verdict-1") and line != "verdict-1"
+    ]
+    assert post == [f"verdict-{i}" for i in range(10, 16)]
+
+
+def test_resize_burst_never_erases_verdicts() -> None:
+    """While the terminal is being resized (a burst of size changes, one
+    per frame) nothing may be erased and the region stays hidden until
+    the size settles again."""
+    size = {"cols": WIDTH, "rows": HEIGHT}
+    out = io.StringIO()
+    display = Display(out, size=lambda: os.terminal_size((size["cols"], size["rows"])))
+    screen = pyte.HistoryScreen(WIDTH, HEIGHT, history=1000)
+    stream = pyte.Stream(screen)
+
+    def frame(batch: list[str], region: list[str]) -> None:
+        mark = out.tell()
+        display.frame(batch, region)
+        stream.feed(out.getvalue()[mark:])
+
+    frame(["verdict-0", "verdict-1"], ["HEADER", "running"])
+    resize_output_start = out.tell()
+    for i, rows in enumerate((11, 10, 9)):  # drag in progress
+        size.update(rows=rows)
+        screen.resize(rows, WIDTH)
+        frame([f"verdict-{2 + i}"], ["HEADER", "running"])
+    burst = out.getvalue()[resize_output_start:]
+    assert "HEADER" not in burst  # region not redrawn mid-resize
+    assert "\x1b[J" not in burst  # nothing erased
+    assert "\x1b[2J" not in burst
+
+    # Once the size settles the visible screen is rebuilt from the model:
+    # most recent verdicts on top, region below, no stale copies.
+    frame(["verdict-5"], ["HEADER", "running"])
+    frame(["verdict-6"], ["HEADER", "running"])
+    visible = [row.rstrip() for row in screen.display]
+    shown = [line for line in visible if line.startswith("verdict-")]
+    assert shown == [f"verdict-{i}" for i in range(7)]
+    assert visible.index("HEADER") == len(shown)
+    assert sum("HEADER" in line for line in visible) == 1
+
+
+def test_long_verdicts_wrap_without_corrupting_region() -> None:
+    out = io.StringIO()
+    display = make_display(out)
+    long_line = "verdict-long " + "x" * (2 * WIDTH)
+    for _ in range(5):
+        display.frame([long_line], ["HEADER", "running"])
+
+    lines = buffer_lines(emulate(out.getvalue()))
+    assert sum("HEADER" in line for line in lines) == 1
+    assert sum(line.startswith("verdict-long") for line in lines) == 5
 
 
 def test_display_permanent_above_ephemeral() -> None:
     out = io.StringIO()
-    d = Display(out)
+    d = make_display(out)
     d.ephemeral(["status"])
     d.permanent("event")
-    text = out.getvalue()
-    # Permanent line printed, ephemeral repainted afterwards.
-    assert text.index("event") < text.rindex("status")
-    assert d.ephemeral_lines == 1
+    visible = [row.rstrip() for row in emulate(out.getvalue()).display]
+    assert visible.index("event") < visible.index("status")
 
 
 def test_display_suspend_queues_permanent() -> None:
     out = io.StringIO()
-    d = Display(out)
+    d = make_display(out)
     d.ephemeral(["status"])
     d.suspend()
     before = out.getvalue()
     d.permanent("while paging")
     assert out.getvalue() == before  # nothing written while suspended
     assert d.resume() == 1
-    assert "while paging" in out.getvalue()
+    visible = [row.rstrip() for row in emulate(out.getvalue()).display]
+    assert "while paging" in visible
 
 
 def test_display_sync_markers() -> None:
     out = io.StringIO()
-    d = Display(out)
+    d = make_display(out)
     d.ephemeral(["x"])
     assert out.getvalue().startswith(f"{CSI}?2026h")
     assert out.getvalue().endswith(f"{CSI}?2026l")
@@ -291,16 +446,18 @@ def test_unknown_key_flashes() -> None:
 
 def test_display_log_handler() -> None:
     out = io.StringIO()
-    d = Display(out)
+    d = make_display(out)
     d.ephemeral(["status"])
     h = DisplayLogHandler(d)
     logger = logging.getLogger("nfb-test")
     logger.addHandler(h)
     logger.warning("multi\nline")
     logger.removeHandler(h)
-    text = out.getvalue()
-    assert "WARNING:nfb-test:multi" in text
-    assert d.ephemeral_lines == 1  # region repainted after the log lines
+    visible = [row.rstrip() for row in emulate(out.getvalue()).display]
+    assert "WARNING:nfb-test:multi" in visible
+    assert "line" in visible
+    # Region repainted below the log lines.
+    assert visible.index("status") > visible.index("line")
 
 
 def test_browser_succeeded_label() -> None:
