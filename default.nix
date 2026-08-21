@@ -23,6 +23,7 @@ python3Packages.buildPythonApplication {
   nativeBuildInputs = [
     makeWrapper
     python3Packages.pytest
+    python3Packages.pyte
   ];
   preFixup = ''
     makeWrapperArgs+=(--prefix PATH : ${path})
