@@ -6,6 +6,8 @@ works with both flakes and plain Nix expressions, and can integrate with remote
 machines by uploading the current flake, performing the evaluation/build
 remotely, and then transferring the resultant store paths back to you.
 
+![nix-fast-build TUI demo](https://github.com/Mic92/nix-fast-build/releases/latest/download/nix-fast-build-demo.gif)
+
 ## Why `nix-fast-build`?
 
 **Problem**: Evaluating and building big flakes i.e. with numerous NixOS
