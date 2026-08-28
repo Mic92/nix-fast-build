@@ -114,7 +114,7 @@ async def run_builds(
 
                 def on_built(drv: str, attr: str = job.attr) -> None:
                     for uq in upload_queues:
-                        uq.put_nowait(UploadItem(attr, [drv]))
+                        uq.put_nowait(UploadItem(attr, [drv], final=False))
 
             start_time = timeit.default_timer()
             build_result = await build.build(

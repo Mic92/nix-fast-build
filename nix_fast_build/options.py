@@ -287,7 +287,7 @@ async def parse_args(args: list[str]) -> Options:
     )
     parser.add_argument(
         "--attic-push-build-closure",
-        help="Deprecated alias for --push-build-closure",
+        help=argparse.SUPPRESS,
         action="store_true",
     )
     parser.add_argument(

@@ -22,6 +22,8 @@ class UploadItem:
     attr: str
     # output paths or .drv paths (resolved to outputs by the worker)
     paths: list[str]
+    # toplevel outputs always yield a Result, intermediates only on failure
+    final: bool = True
 
 
 UploadQueue = QueueWithContext[UploadItem | StopTask]
@@ -172,16 +174,17 @@ async def run_upload_worker(
             items = _drain(queue, first)
 
             by_attr: dict[str, set[str]] = {}
+            final: set[str] = set()
             for item in items:
-                new = set(item.paths) - uploader.pushed
-                if new:
-                    by_attr.setdefault(item.attr, set()).update(new)
-            if not by_attr:
-                continue
+                by_attr.setdefault(item.attr, set()).update(
+                    set(item.paths) - uploader.pushed
+                )
+                if item.final:
+                    final.add(item.attr)
 
             start = timeit.default_timer()
             batch = set().union(*by_attr.values())
-            rc = await uploader.push(batch)
+            rc = await uploader.push(batch) if batch else 0
             rcs = dict.fromkeys(by_attr, rc)
             if rc != 0 and len(by_attr) > 1:
                 logger.warning(
@@ -191,11 +194,13 @@ async def run_upload_worker(
                     rc,
                 )
                 for attr, paths in by_attr.items():
-                    rcs[attr] = await uploader.push(paths)
+                    rcs[attr] = await uploader.push(paths) if paths else 0
             duration = (timeit.default_timer() - start) / len(by_attr)
             for attr, attr_rc in rcs.items():
                 if attr_rc == 0:
                     uploader.pushed.update(by_attr[attr])
+                if attr_rc == 0 and attr not in final:
+                    continue
                 await result_queue.put(
                     Result(
                         result_type=uploader.result_type,

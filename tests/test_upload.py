@@ -75,11 +75,17 @@ def test_batches_resolves_drvs_filters_invalid_and_dedups() -> None:
         up,
         [
             [
-                UploadItem("a", ["/nix/store/x-lib.drv"]),
-                UploadItem("b", ["/nix/store/x-lib.drv", "/nix/store/y-broken.drv"]),
+                UploadItem("a", ["/nix/store/x-lib.drv"], final=False),
+                UploadItem(
+                    "b",
+                    ["/nix/store/x-lib.drv", "/nix/store/y-broken.drv"],
+                    final=False,
+                ),
                 UploadItem("a", ["/nix/store/a-out"]),
             ],
             [UploadItem("b", ["/nix/store/x-lib.drv", "/nix/store/b-out"])],
+            # alias attr with only already-pushed paths still gets a result
+            [UploadItem("a-alias", ["/nix/store/a-out"])],
         ],
     )
     assert up.calls == [
@@ -89,7 +95,7 @@ def test_batches_resolves_drvs_filters_invalid_and_dedups() -> None:
     assert [(r.attr, r.success) for r in results] == [
         ("a", True),
         ("b", True),
-        ("b", True),
+        ("a-alias", True),
     ]
 
 
