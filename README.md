@@ -273,6 +273,22 @@ a custom path via the `NIKS3_AUTH_TOKEN_FILE` environment variable.
 When using the `--remote` flag, ensure that the auth token file exists on the
 remote machine (either at the default XDG path or via `NIKS3_AUTH_TOKEN_FILE`).
 
+## Caching intermediate build products
+
+By default only the final outputs of each attribute are pushed to the configured
+caches (`--copy-to`, `--cachix-cache`, `--attic-cache`, `--niks3-server`). On
+ephemeral CI runners with an empty nix store this means intermediate derivations
+that are not part of the runtime closure (build hooks, wheels, vendored deps,
+...) are rebuilt on every run.
+
+With `--push-build-closure`, nix-fast-build additionally pushes the outputs of
+every derivation nix actually built locally (as opposed to substituted) as soon
+as it finishes, even while the toplevel attribute is still building:
+
+```console
+$ nix-fast-build --attic-cache mic92 --push-build-closure
+```
+
 ## Machine-readable builds results
 
 nix-fast-build supports both its own json format and junit:
@@ -334,11 +350,10 @@ usage: nix-fast-build [-h] [--nix NIX] [--nix-eval-jobs NIX_EVAL_JOBS]
                       [--cachix-cache CACHIX_CACHE]
                       [--attic-cache ATTIC_CACHE]
                       [--attic-ignore-upstream-cache-filter]
-                      [--push-build-closure] [--attic-push-build-closure]
-                      [--niks3-server NIKS3_SERVER] [--no-nom] [--no-fold]
-                      [--stall-timeout STALL_TIMEOUT] [--systems SYSTEMS]
-                      [--retries RETRIES] [--no-link] [--out-link OUT_LINK]
-                      [--store STORE] [--remote REMOTE]
+                      [--push-build-closure] [--niks3-server NIKS3_SERVER]
+                      [--no-nom] [--no-fold] [--stall-timeout STALL_TIMEOUT]
+                      [--systems SYSTEMS] [--retries RETRIES] [--no-link]
+                      [--out-link OUT_LINK] [--store STORE] [--remote REMOTE]
                       [--always-upload-source] [--no-download] [--skip-cached]
                       [--copy-to COPY_TO] [--debug]
                       [--eval-max-memory-size EVAL_MAX_MEMORY_SIZE]
@@ -395,8 +410,6 @@ options:
                         soon as they finish. Useful for caching intermediate
                         build products in ephemeral CI environments (default:
                         false)
-  --attic-push-build-closure
-                        Deprecated alias for --push-build-closure
   --niks3-server NIKS3_SERVER
                         Niks3 server URL to upload to (auth from
                         ~/.config/niks3/auth-token or NIKS3_AUTH_TOKEN_FILE)
