@@ -2,8 +2,9 @@ import asyncio
 import json
 from typing import TYPE_CHECKING, Any
 
-from nix_fast_build.build import BuildQueue, JobQueue
+from nix_fast_build.build import JobQueue
 from nix_fast_build.options import Options
+from nix_fast_build.upload import UploadQueue
 from nix_fast_build.workers import run_evaluation
 
 if TYPE_CHECKING:
@@ -32,15 +33,15 @@ JOB = {
 }
 
 
-def _eval(opts: Options) -> tuple[JobQueue, BuildQueue]:
+def _eval(opts: Options) -> tuple[JobQueue, UploadQueue]:
     build_queue: JobQueue = JobQueue()
-    upload_queue: BuildQueue = BuildQueue()
+    upload_queue: UploadQueue = UploadQueue()
     result_queue: asyncio.Queue[Result | None] = asyncio.Queue()
     asyncio.run(
         run_evaluation(
             FakeEvalProc([JOB]),  # type: ignore[arg-type]
             build_queue,
-            upload_queue,
+            [upload_queue],
             result_queue,
             opts,
         )
@@ -65,7 +66,7 @@ def test_eval_result_reports_outputs_and_drv_path() -> None:
         run_evaluation(
             FakeEvalProc([{**JOB, "cacheStatus": "cached"}]),  # type: ignore[arg-type]
             JobQueue(),
-            None,
+            [],
             result_queue,
             Options(systems={"x86_64-linux"}),
         )
