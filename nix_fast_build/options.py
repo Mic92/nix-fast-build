@@ -74,7 +74,7 @@ class Options:
 
     attic_cache: str | None = None
     attic_ignore_upstream_cache_filter: bool = False
-    attic_push_build_closure: bool = False
+    push_build_closure: bool = False
 
     niks3_server: str | None = None
 
@@ -281,8 +281,13 @@ async def parse_args(args: list[str]) -> Options:
         action="store_true",
     )
     parser.add_argument(
+        "--push-build-closure",
+        help="Also push outputs of every intermediate derivation that was built (not substituted) while building an attribute to the configured caches (--copy-to/--cachix-cache/--attic-cache/--niks3-server), as soon as they finish. Useful for caching intermediate build products in ephemeral CI environments (default: false)",
+        action="store_true",
+    )
+    parser.add_argument(
         "--attic-push-build-closure",
-        help="Also push the build-time closure to attic, not just the runtime closure. Useful for caching intermediate build products in ephemeral CI environments (default: false)",
+        help="Deprecated alias for --push-build-closure",
         action="store_true",
     )
     parser.add_argument(
@@ -452,6 +457,12 @@ async def parse_args(args: list[str]) -> Options:
         if any(name in ("store", "eval-store", "builders") for name, _ in a.option):
             parser.error("--option store/eval-store/builders conflicts with --store")
 
+    if a.attic_push_build_closure:
+        logger.warning(
+            "--attic-push-build-closure is deprecated, use --push-build-closure"
+        )
+        a.push_build_closure = True
+
     if a.no_link:
         logger.warning(
             "--no-link is deprecated and has no effect: "
@@ -563,7 +574,7 @@ async def parse_args(args: list[str]) -> Options:
         cachix_cache=a.cachix_cache,
         attic_cache=a.attic_cache,
         attic_ignore_upstream_cache_filter=a.attic_ignore_upstream_cache_filter,
-        attic_push_build_closure=a.attic_push_build_closure,
+        push_build_closure=a.push_build_closure,
         niks3_server=a.niks3_server,
         store=a.store,
         out_link=a.out_link,

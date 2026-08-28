@@ -1,9 +1,6 @@
 import asyncio
 import json
 import logging
-import os
-import shlex
-import sys
 import timeit
 from asyncio import Queue
 from asyncio.subprocess import Process
@@ -13,9 +10,10 @@ from typing import Any
 
 from .build import Build, BuildQueue, Job, JobQueue, OptionalQueue, StopTask
 from .errors import Error
-from .options import Options, maybe_remote, nix_shell
+from .options import Options
 from .renderer import Renderer
 from .results import Result, ResultType
+from .upload import UploadItem, UploadQueue
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +25,7 @@ def _job_outputs(job: dict[str, Any]) -> dict[str, str]:
 async def run_evaluation(
     eval_proc: Process,
     build_queue: JobQueue,
-    upload_queue: BuildQueue | None,
+    upload_queues: list[UploadQueue],
     result_queue: "Queue[Result | None]",
     opts: Options,
 ) -> int:
@@ -70,8 +68,8 @@ async def run_evaluation(
         if cache_status == "cached":
             continue
         if cache_status == "local":
-            if upload_queue is not None:
-                upload_queue.put_nowait(Build(attr, job["drvPath"], outputs))
+            for uq in upload_queues:
+                uq.put_nowait(UploadItem(attr, list(outputs.values())))
             # already valid locally: build only if a result symlink is wanted
             if opts.out_link is None:
                 continue
@@ -89,7 +87,8 @@ async def run_evaluation(
 async def run_builds(
     stack: AsyncExitStack,
     build_queue: JobQueue,
-    optional_queues: list[BuildQueue],
+    upload_queues: list[UploadQueue],
+    build_queues: list[BuildQueue],
     result_queue: "Queue[Result | None]",
     *,
     opts: Options,
@@ -110,8 +109,17 @@ async def run_builds(
                 continue
             drv_paths.add(job.drv_path)
             build = Build(job.attr, job.drv_path, job.outputs)
+            on_built = None
+            if opts.push_build_closure and upload_queues:
+
+                def on_built(drv: str, attr: str = job.attr) -> None:
+                    for uq in upload_queues:
+                        uq.put_nowait(UploadItem(attr, [drv]))
+
             start_time = timeit.default_timer()
-            build_result = await build.build(stack, opts, renderer=renderer)
+            build_result = await build.build(
+                stack, opts, renderer=renderer, on_built=on_built
+            )
             await result_queue.put(
                 Result(
                     result_type=ResultType.BUILD,
@@ -130,8 +138,11 @@ async def run_builds(
             if build_result.return_code != 0:
                 opts.signal_stop()
                 continue
-            for queue in optional_queues:
-                queue.put_nowait(build)
+            if job.outputs:
+                for uq in upload_queues:
+                    uq.put_nowait(UploadItem(job.attr, list(job.outputs.values())))
+            for bq in build_queues:
+                bq.put_nowait(build)
 
 
 async def run_queue_worker(
@@ -158,70 +169,6 @@ async def run_queue_worker(
                     error=f"{label} exited with {rc}" if rc != 0 else None,
                 )
             )
-
-
-async def run_niks3_upload(
-    niks3_queue: BuildQueue,
-    result_queue: "Queue[Result | None]",
-    opts: Options,
-) -> int:
-    while True:
-        # Wait for at least one item
-        async with niks3_queue.get_context() as first_item:
-            if isinstance(first_item, StopTask):
-                logger.debug("finish niks3 upload task")
-                return 0
-
-            # Collect this build plus any others currently queued
-            builds: list[Build] = [first_item]
-            while not niks3_queue.empty():
-                try:
-                    item = niks3_queue.get_nowait()
-                    niks3_queue.task_done()
-                    if isinstance(item, StopTask):
-                        # Put it back for proper shutdown
-                        niks3_queue.put_nowait(item)
-                        break
-                    builds.append(item)
-                except asyncio.QueueEmpty:
-                    break
-
-            # Collect all output paths
-            all_outputs: list[str] = []
-            for build in builds:
-                all_outputs.extend(build.outputs.values())
-
-            start_time = timeit.default_timer()
-            env = os.environ.copy()
-            # niks3_server is guaranteed non-None since this worker is only created when configured
-            assert opts.niks3_server is not None
-            env["NIKS3_SERVER_URL"] = opts.niks3_server
-            cmd = maybe_remote(
-                [
-                    *nix_shell("github:Mic92/niks3", "niks3"),
-                    "push",
-                    *all_outputs,
-                ],
-                opts,
-            )
-            logger.debug("run %s", shlex.join(cmd))
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, env=env, stdout=sys.stderr.fileno()
-            )
-            rc = await proc.wait()
-            duration = timeit.default_timer() - start_time
-
-            # Record result for each build
-            for build in builds:
-                await result_queue.put(
-                    Result(
-                        result_type=ResultType.NIKS3,
-                        attr=build.attr,
-                        success=rc == 0,
-                        duration=duration / len(builds),
-                        error=f"niks3 upload exited with {rc}" if rc != 0 else None,
-                    )
-                )
 
 
 async def report_progress(

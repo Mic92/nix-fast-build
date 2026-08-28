@@ -334,7 +334,7 @@ usage: nix-fast-build [-h] [--nix NIX] [--nix-eval-jobs NIX_EVAL_JOBS]
                       [--cachix-cache CACHIX_CACHE]
                       [--attic-cache ATTIC_CACHE]
                       [--attic-ignore-upstream-cache-filter]
-                      [--attic-push-build-closure]
+                      [--push-build-closure] [--attic-push-build-closure]
                       [--niks3-server NIKS3_SERVER] [--no-nom] [--no-fold]
                       [--stall-timeout STALL_TIMEOUT] [--systems SYSTEMS]
                       [--retries RETRIES] [--no-link] [--out-link OUT_LINK]
@@ -388,11 +388,15 @@ options:
                         Pass --ignore-upstream-cache-filter to attic push,
                         uploading all paths even if attic thinks they exist in
                         an upstream cache (default: false)
-  --attic-push-build-closure
-                        Also push the build-time closure to attic, not just
-                        the runtime closure. Useful for caching intermediate
+  --push-build-closure  Also push outputs of every intermediate derivation
+                        that was built (not substituted) while building an
+                        attribute to the configured caches (--copy-
+                        to/--cachix-cache/--attic-cache/--niks3-server), as
+                        soon as they finish. Useful for caching intermediate
                         build products in ephemeral CI environments (default:
                         false)
+  --attic-push-build-closure
+                        Deprecated alias for --push-build-closure
   --niks3-server NIKS3_SERVER
                         Niks3 server URL to upload to (auth from
                         ~/.config/niks3/auth-token or NIKS3_AUTH_TOKEN_FILE)
@@ -413,8 +417,8 @@ options:
                         prefix (e.g. 'result'). By default builds are only gc-
                         rooted for the duration of the run.
   --store STORE         Nix store URL to build against (e.g. ssh-ng://host).
-                        Evaluation stays local; only builds are dispatched.
-                        Conflicts with --out-link.
+                        Evaluation stays local and only builds are dispatched.
+                        Implies --builders ''. Conflicts with --out-link.
   --remote REMOTE       Remote machine to build on
   --always-upload-source
                         Always upload sources to remote machine. This is

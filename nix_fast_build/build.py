@@ -9,11 +9,10 @@ from asyncio.subprocess import Process
 from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, TypeVar
 
-from .log_format import LogParser
-from .options import Options, maybe_remote, nix_shell
+from .log_format import ActivityStopped, ActivityType, LogParser
+from .options import Options, maybe_remote
 from .processes import ensure_stop
 from .renderer import BuildOutput, Renderer
 
@@ -39,8 +38,9 @@ class Build:
         stack: AsyncExitStack,
         opts: Options,
         renderer: Renderer | None = None,
+        on_built: Callable[[str], None] | None = None,
     ) -> BuildResult:
-        """Build and return BuildResult."""
+        """on_built receives each intermediate .drv nix ran a builder for."""
         rc = 0
         sink: BuildOutput | None = None
         for attempt in range(opts.retries + 1):
@@ -48,7 +48,13 @@ class Build:
                 sink = renderer.start_build(self.attr, self.drv_path)
             try:
                 proc = await stack.enter_async_context(
-                    nix_build(self.attr, self.drv_path, opts, sink=sink)
+                    nix_build(
+                        self.attr,
+                        self.drv_path,
+                        opts,
+                        sink=sink,
+                        on_built=on_built,
+                    )
                 )
                 rc = await proc.wait()
             except BaseException:
@@ -96,111 +102,6 @@ class Build:
             logger.debug(f"Failed to get build log: {e}")
         return ""
 
-    async def upload(self, exit_stack: AsyncExitStack, opts: Options) -> int:
-        if not opts.copy_to or not self.outputs:
-            return 0
-        cmd = opts.nix_command(
-            [
-                "copy",
-                "--log-format",
-                "raw",
-                "--to",
-                opts.copy_to,
-                *list(self.outputs.values()),
-            ]
-        )
-        cmd = maybe_remote(cmd, opts)
-        logger.debug("run %s", shlex.join(cmd))
-        proc = await asyncio.create_subprocess_exec(*cmd, stdout=sys.stderr.fileno())
-        await exit_stack.enter_async_context(ensure_stop(proc, cmd))
-        return await proc.wait()
-
-    async def upload_cachix(self, cachix_socket_path: Path, opts: Options) -> int:
-        if not self.outputs:
-            return 0
-        cmd = maybe_remote(
-            [
-                *nix_shell("nixpkgs#cachix", "cachix"),
-                "daemon",
-                "push",
-                "--socket",
-                str(cachix_socket_path),
-                *list(self.outputs.values()),
-            ],
-            opts,
-        )
-        logger.debug("run %s", shlex.join(cmd))
-        proc = await asyncio.create_subprocess_exec(*cmd, stdout=sys.stderr.fileno())
-        return await proc.wait()
-
-    async def _query_build_closure(self, opts: Options) -> list[str]:
-        """Query all realised store paths in the build closure of this derivation.
-
-        Returns output paths of all build-time requisites that exist in
-        the store.  After a successful build these are guaranteed to be
-        present because nix had to build or substitute every dependency.
-        """
-        query_cmd = maybe_remote(
-            [
-                "nix-store",
-                "--query",
-                "--requisites",
-                "--include-outputs",
-                self.drv_path,
-            ],
-            opts,
-        )
-        proc = await asyncio.create_subprocess_exec(
-            *query_cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await proc.communicate()
-        if proc.returncode != 0:
-            logger.warning(
-                "nix-store -qR --include-outputs failed for %s (rc=%d), "
-                "falling back to output paths only",
-                self.drv_path,
-                proc.returncode,
-            )
-            return list(self.outputs.values())
-
-        paths: list[str] = []
-        for line in stdout.decode().splitlines():
-            path = line.strip()
-            if path and not path.endswith(".drv"):
-                paths.append(path)
-        return paths or list(self.outputs.values())
-
-    async def upload_attic(self, opts: Options) -> int:
-        if opts.attic_cache is None or not self.outputs:
-            return 0
-        push_args = ["push"]
-        if opts.attic_ignore_upstream_cache_filter:
-            push_args.append("--ignore-upstream-cache-filter")
-        push_args.append(opts.attic_cache)
-        if opts.attic_push_build_closure:
-            paths = await self._query_build_closure(opts)
-            push_args.append("--no-closure")
-            push_args.extend(paths)
-            logger.debug(
-                "attic push: %d paths (build closure) for %s",
-                len(paths),
-                self.attr,
-            )
-        else:
-            push_args.extend(self.outputs.values())
-        cmd = maybe_remote(
-            [
-                *nix_shell("nixpkgs#attic-client", "attic"),
-                *push_args,
-            ],
-            opts,
-        )
-        logger.debug("run %s", shlex.join(cmd))
-        proc = await asyncio.create_subprocess_exec(*cmd, stdout=sys.stderr.fileno())
-        return await proc.wait()
-
     def out_link_args(self, opts: Options) -> list[str]:
         if opts.out_link is not None:
             return ["--out-link", opts.out_link + "-" + self.attr]
@@ -243,7 +144,7 @@ T = TypeVar("T")
 class OptionalQueue:
     """Post-build queue with the workers that drain it, for proper shutdown."""
 
-    queue: "BuildQueue"
+    queue: "QueueWithContext[Any]"
     worker_count: int
     name: str
     make_worker: Callable[[], Coroutine[Any, Any, int]]
@@ -271,6 +172,7 @@ async def nix_build(
     installable: str,
     opts: Options,
     sink: BuildOutput | None = None,
+    on_built: Callable[[str], None] | None = None,
 ) -> AsyncIterator[Process]:
     args = opts.nix_command(
         ["build", f"{installable}^*", "--keep-going", *opts.options, *opts.store_args]
@@ -303,10 +205,20 @@ async def nix_build(
         parser = LogParser()
         try:
             async for line in proc.stderr:
+                event = parser.parse_line(line)
+                if event is None:
+                    continue
+                if (
+                    on_built is not None
+                    and isinstance(event, ActivityStopped)
+                    and event.activity is not None
+                    and event.activity.type == ActivityType.BUILD
+                    and event.activity.fields
+                    and str(event.activity.fields[0]) != installable
+                ):
+                    on_built(str(event.activity.fields[0]))
                 if sink is not None:
-                    event = parser.parse_line(line)
-                    if event is not None:
-                        sink.on_event(event)
+                    sink.on_event(event)
         except ValueError:
             # Line exceeded the stream limit. Stop forwarding but don't
             # let the exception escape the cleanup that awaits this task.

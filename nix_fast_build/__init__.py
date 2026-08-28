@@ -5,12 +5,11 @@ import os
 import sys
 from asyncio import Queue, TaskGroup
 from collections import defaultdict
-from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from .build import Build, BuildQueue, JobQueue, OptionalQueue, StopTask
+from .build import BuildQueue, JobQueue, OptionalQueue, StopTask
 from .ci_renderer import CIRenderer
 from .errors import Error
 from .options import EvalMode, Options, ResultFormat, parse_args
@@ -30,11 +29,19 @@ from .results import Result, ResultType, Summary
 from .sources import upload_sources
 from .term import fold_markers, is_ignored_eval_line, sanitize_line, want_color
 from .tty_renderer import TTYRenderer
+from .upload import (
+    AtticUploader,
+    CachixUploader,
+    Niks3Uploader,
+    NixCopyUploader,
+    Uploader,
+    UploadQueue,
+    run_upload_worker,
+)
 from .workers import (
     report_progress,
     run_builds,
     run_evaluation,
-    run_niks3_upload,
     run_queue_worker,
 )
 
@@ -120,55 +127,54 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     result_queue: Queue[Result | None] = Queue()
     build_queue = JobQueue()
 
-    # Build list of optional queues that are actually needed
+    # Post-build queues that are actually configured.
     optional_queues: list[OptionalQueue] = []
+    upload_queues: list[UploadQueue] = []
+    build_queues: list[BuildQueue] = []
 
-    def add_queue(
-        name: str,
-        result_type: ResultType,
-        push: Callable[[Build], Awaitable[int]],
-    ) -> BuildQueue:
-        queue = BuildQueue()
+    def add_uploader(uploader: Uploader) -> None:
+        # single worker: it batches whatever is queued into one push
+        queue = UploadQueue()
+        upload_queues.append(queue)
         optional_queues.append(
             OptionalQueue(
                 queue,
-                opts.max_jobs,
-                name,
-                lambda: run_queue_worker(queue, result_queue, result_type, name, push),
-            )
-        )
-        return queue
-
-    upload_queue: BuildQueue | None = None
-    if opts.copy_to:
-        upload_queue = add_queue(
-            "upload", ResultType.UPLOAD, lambda b: b.upload(stack, opts)
-        )
-
-    if cachix_socket_path is not None:
-        # Local alias so mypy sees a non-None capture in the lambda.
-        socket_path = cachix_socket_path
-        add_queue(
-            "cachix", ResultType.CACHIX, lambda b: b.upload_cachix(socket_path, opts)
-        )
-
-    if opts.attic_cache:
-        add_queue("attic", ResultType.ATTIC, lambda b: b.upload_attic(opts))
-
-    if opts.niks3_server:
-        # Single niks3 worker since it batches uploads internally
-        niks3_queue = BuildQueue()
-        optional_queues.append(
-            OptionalQueue(
-                niks3_queue,
                 1,
-                "niks3",
-                lambda: run_niks3_upload(niks3_queue, result_queue, opts),
+                uploader.name,
+                lambda: run_upload_worker(queue, result_queue, uploader),
             )
         )
+
+    if opts.copy_to:
+        add_uploader(NixCopyUploader("upload", ResultType.UPLOAD, opts))
+    if cachix_socket_path is not None:
+        add_uploader(
+            CachixUploader(
+                "cachix", ResultType.CACHIX, opts, socket_path=cachix_socket_path
+            )
+        )
+    if opts.attic_cache:
+        add_uploader(AtticUploader("attic", ResultType.ATTIC, opts))
+    if opts.niks3_server:
+        add_uploader(Niks3Uploader("niks3", ResultType.NIKS3, opts))
 
     if opts.remote_url and opts.download:
-        add_queue("download", ResultType.DOWNLOAD, lambda b: b.download(stack, opts))
+        download_queue = BuildQueue()
+        build_queues.append(download_queue)
+        optional_queues.append(
+            OptionalQueue(
+                download_queue,
+                opts.max_jobs,
+                "download",
+                lambda: run_queue_worker(
+                    download_queue,
+                    result_queue,
+                    ResultType.DOWNLOAD,
+                    "download",
+                    lambda b: b.download(stack, opts),
+                ),
+            )
+        )
 
     async def dequeue_results() -> None:
         # Stream results as they arrive and collect them for the final
@@ -188,7 +194,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         # Ends on its own at eval stderr EOF (process exit).
         tasks.append(tg.create_task(forward_eval_stderr(), name="eval-stderr"))
         evaluation = tg.create_task(
-            run_evaluation(eval_proc, build_queue, upload_queue, result_queue, opts)
+            run_evaluation(eval_proc, build_queue, upload_queues, result_queue, opts)
         )
         tasks.append(evaluation)
         logger.debug("Starting %d build tasks", opts.max_jobs)
@@ -197,7 +203,8 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
                 run_builds(
                     stack,
                     build_queue,
-                    [oq.queue for oq in optional_queues],
+                    upload_queues,
+                    build_queues,
                     result_queue,
                     opts=opts,
                     renderer=renderer,
