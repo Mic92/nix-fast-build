@@ -12,6 +12,7 @@ from nix_fast_build.upload import (
     Uploader,
     UploadItem,
     UploadQueue,
+    _chunk_args,
     run_upload_worker,
 )
 
@@ -97,6 +98,16 @@ def test_batches_resolves_drvs_filters_invalid_and_dedups() -> None:
         ("b", True),
         ("a-alias", True),
     ]
+
+
+def test_chunk_args_respects_limit() -> None:
+    args = [f"/nix/store/{i:04}-p" for i in range(10)]
+    chunks = _chunk_args(args, limit=50)
+    assert [a for c in chunks for a in c] == args
+    assert all(sum(len(a) + 1 for a in c) <= 50 for c in chunks)
+    assert len(chunks) > 1
+    assert _chunk_args(["x" * 100], limit=50) == [["x" * 100]]
+    assert _chunk_args([], limit=50) == []
 
 
 @pytest.mark.usefixtures("fake_path")

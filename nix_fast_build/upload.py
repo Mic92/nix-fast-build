@@ -49,20 +49,74 @@ async def _run_with_stdin(
     return proc.returncode, (stdout or b"").decode()
 
 
+# Conservative: with --remote the whole command line becomes a single argv
+# entry for the remote shell, which Linux caps at MAX_ARG_STRLEN (128 KiB).
+MAX_ARGS_BYTES = 96 * 1024
+
+
+def _chunk_args(args: Sequence[str], limit: int = MAX_ARGS_BYTES) -> list[list[str]]:
+    chunks: list[list[str]] = []
+    current: list[str] = []
+    size = 0
+    for arg in args:
+        n = len(arg.encode()) + 1
+        if current and size + n > limit:
+            chunks.append(current)
+            current, size = [], 0
+        current.append(arg)
+        size += n
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+async def _run_with_args(
+    cmd: list[str],
+    args: Sequence[str],
+    opts: Options,
+    *,
+    env: dict[str, str] | None = None,
+    capture: bool = False,
+) -> tuple[int, str]:
+    """Run cmd with args appended, splitting into several invocations if needed."""
+    rc = 0
+    out: list[str] = []
+    for chunk in _chunk_args(args):
+        full = maybe_remote([*cmd, *chunk], opts)
+        logger.debug("run %s (+%d paths)", shlex.join(cmd), len(chunk))
+        proc = await asyncio.create_subprocess_exec(
+            *full,
+            env=env,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE if capture else sys.stderr.fileno(),
+        )
+        async with ensure_stop(proc, full):
+            stdout, _ = await proc.communicate()
+        assert proc.returncode is not None
+        if proc.returncode != 0:
+            rc = proc.returncode
+        out.append((stdout or b"").decode())
+    return rc, "".join(out)
+
+
 @dataclass
 class Uploader:
     name: str
     result_type: ResultType
     opts: Options
     pushed: set[str] = field(default_factory=set)
+    # whether command() reads newline-separated paths on stdin instead of argv
+    reads_stdin = False
 
     def command(self) -> tuple[list[str], dict[str, str] | None]:
-        """Command reading newline-separated store paths on stdin (ARG_MAX)."""
         raise NotImplementedError
 
     async def send(self, paths: list[str]) -> int:
         cmd, env = self.command()
-        rc, _ = await _run_with_stdin(maybe_remote(cmd, self.opts), paths, env=env)
+        if self.reads_stdin:
+            rc, _ = await _run_with_stdin(maybe_remote(cmd, self.opts), paths, env=env)
+        else:
+            rc, _ = await _run_with_args(cmd, paths, self.opts, env=env)
         return rc
 
     async def push(self, raw: set[str]) -> int:
@@ -76,12 +130,9 @@ class Uploader:
 class NixCopyUploader(Uploader):
     def command(self) -> tuple[list[str], dict[str, str] | None]:
         assert self.opts.copy_to is not None
-        return [
-            "xargs",
-            *self.opts.nix_command(
-                ["copy", "--log-format", "raw", "--to", self.opts.copy_to]
-            ),
-        ], None
+        return self.opts.nix_command(
+            ["copy", "--log-format", "raw", "--to", self.opts.copy_to]
+        ), None
 
 
 @dataclass
@@ -90,7 +141,6 @@ class CachixUploader(Uploader):
 
     def command(self) -> tuple[list[str], dict[str, str] | None]:
         return [
-            "xargs",
             *nix_shell("nixpkgs#cachix", "cachix"),
             "daemon",
             "push",
@@ -101,6 +151,8 @@ class CachixUploader(Uploader):
 
 @dataclass
 class AtticUploader(Uploader):
+    reads_stdin = True
+
     def command(self) -> tuple[list[str], dict[str, str] | None]:
         assert self.opts.attic_cache is not None
         args = [*nix_shell("nixpkgs#attic-client", "attic"), "push", "--stdin"]
@@ -116,7 +168,7 @@ class Niks3Uploader(Uploader):
         assert self.opts.niks3_server is not None
         env = os.environ.copy()
         env["NIKS3_SERVER_URL"] = self.opts.niks3_server
-        return ["xargs", *nix_shell("github:Mic92/niks3", "niks3"), "push"], env
+        return [*nix_shell("github:Mic92/niks3", "niks3"), "push"], env
 
 
 async def resolve_valid_outputs(paths: set[str], opts: Options) -> set[str]:
@@ -124,21 +176,18 @@ async def resolve_valid_outputs(paths: set[str], opts: Options) -> set[str]:
     drvs = sorted(p for p in paths if p.endswith(".drv"))
     outs = {p for p in paths if not p.endswith(".drv")}
     if drvs:
-        rc, stdout = await _run_with_stdin(
-            maybe_remote(["xargs", "nix-store", "--query", "--outputs"], opts),
-            drvs,
-            capture=True,
+        rc, stdout = await _run_with_args(
+            ["nix-store", "--query", "--outputs"], drvs, opts, capture=True
         )
         if rc != 0:
             logger.warning("nix-store --query --outputs failed (rc=%d)", rc)
         outs.update(stdout.split())
     if not outs:
         return outs
-    rc, stdout = await _run_with_stdin(
-        maybe_remote(
-            ["xargs", "nix-store", "--check-validity", "--print-invalid"], opts
-        ),
+    rc, stdout = await _run_with_args(
+        ["nix-store", "--check-validity", "--print-invalid"],
         sorted(outs),
+        opts,
         capture=True,
     )
     if rc != 0:
