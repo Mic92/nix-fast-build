@@ -248,6 +248,7 @@ def dump_junit_xml(file: IO[str], suite_name: str, build_results: list[Result]) 
             "name": suite_name,
             "tests": str(len(build_results)),
             "failures": str(sum(1 for r in build_results if not r.success)),
+            "skipped": str(sum(1 for r in build_results if r.skipped)),
         },
     )
 
@@ -262,7 +263,9 @@ def dump_junit_xml(file: IO[str], suite_name: str, build_results: list[Result]) 
             },
         )
 
-        if not result.success:
+        if result.skipped:
+            ET.SubElement(testcase, "skipped", {"message": result.error or ""})
+        elif not result.success:
             failure = ET.SubElement(
                 testcase,
                 "failure",

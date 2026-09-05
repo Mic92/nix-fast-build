@@ -68,6 +68,7 @@ class Options:
     override_inputs: list[list[str]] = field(default_factory=list)
     select_expr: str | None = None
     fail_fast: bool = False
+    skip_unsupported: bool = False
     reference_lock_file: str | None = None
 
     cachix_cache: str | None = None
@@ -294,6 +295,12 @@ async def parse_args(args: list[str]) -> Options:
         "--niks3-server",
         help="Niks3 server URL to upload to (auth from ~/.config/niks3/auth-token or NIKS3_AUTH_TOKEN_FILE)",
         default=None,
+    )
+    parser.add_argument(
+        "--skip-unsupported",
+        help="Report attributes whose meta.platforms/badPlatforms exclude the "
+        "evaluated system as skipped instead of failed",
+        action="store_true",
     )
     parser.add_argument(
         "--no-nom",
@@ -585,4 +592,5 @@ async def parse_args(args: list[str]) -> Options:
         select_expr=a.select,
         reference_lock_file=a.reference_lock_file,
         fail_fast=a.fail_fast,
+        skip_unsupported=a.skip_unsupported,
     )

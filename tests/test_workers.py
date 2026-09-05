@@ -78,3 +78,42 @@ def test_eval_result_reports_outputs_and_drv_path() -> None:
     assert data["outputs"] == {"out": "/nix/store/aaa-foo"}
     assert data["drvPath"] == "/nix/store/aaa-foo.drv"
     assert data["cacheStatus"] == "cached"
+
+
+UNSUPPORTED_JOB = {
+    "attr": "bar",
+    "error": "error: Package bar-1.0 in /x is not available on the requested "
+    'hostPlatform:\n  hostPlatform.system = "x86_64-linux"',
+}
+
+
+def _eval_error(opts: Options) -> "Result":
+    result_queue: asyncio.Queue[Result | None] = asyncio.Queue()
+    asyncio.run(
+        run_evaluation(
+            FakeEvalProc([UNSUPPORTED_JOB]),  # type: ignore[arg-type]
+            JobQueue(),
+            [],
+            result_queue,
+            opts,
+        )
+    )
+    result = result_queue.get_nowait()
+    assert result is not None
+    return result
+
+
+def test_unsupported_platform_fails_by_default() -> None:
+    opts = Options(fail_fast=True)
+    result = _eval_error(opts)
+    assert not result.success
+    assert not result.skipped
+    assert opts.should_stop
+
+
+def test_skip_unsupported_reports_skipped() -> None:
+    opts = Options(fail_fast=True, skip_unsupported=True)
+    result = _eval_error(opts)
+    assert result.success
+    assert result.as_dict()["skipped"] is True
+    assert not opts.should_stop
