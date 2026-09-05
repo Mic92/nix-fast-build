@@ -23,6 +23,7 @@ class Result:
     outputs: dict[str, str] | None = None
     drv_path: str | None = None
     cache_status: str | None = None
+    skipped: bool = False
 
     def as_dict(self) -> dict:
         return {
@@ -31,6 +32,7 @@ class Result:
             "success": self.success,
             "duration": self.duration,
             "error": self.error,
+            **({"skipped": True} if self.skipped else {}),
             **({"outputs": self.outputs} if self.outputs is not None else {}),
             **({"drvPath": self.drv_path} if self.drv_path is not None else {}),
             **(

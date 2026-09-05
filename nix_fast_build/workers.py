@@ -22,6 +22,10 @@ def _job_outputs(job: dict[str, Any]) -> dict[str, str]:
     return {k: v for k, v in job.get("outputs", {}).items() if v is not None}
 
 
+# nixpkgs check-meta wording for meta.platforms/badPlatforms mismatches
+UNSUPPORTED_MARKER = "is not available on the requested hostPlatform"
+
+
 async def run_evaluation(
     eval_proc: Process,
     build_queue: JobQueue,
@@ -47,21 +51,24 @@ async def run_evaluation(
         if cache_status is None and job.get("isCached", False):
             cache_status = "cached"
         outputs = _job_outputs(job)
+        skipped = bool(error and opts.skip_unsupported and UNSUPPORTED_MARKER in error)
         await result_queue.put(
             Result(
                 result_type=ResultType.EVAL,
                 attr=attr,
-                success=error is None,
+                success=error is None or skipped,
                 # TODO: maybe add this to nix-eval-jobs?
                 duration=0.0,
                 error=error,
                 outputs=outputs or None,
                 drv_path=job.get("drvPath"),
                 cache_status=cache_status,
+                skipped=skipped,
             )
         )
         if error:
-            opts.signal_stop()
+            if not skipped:
+                opts.signal_stop()
             continue
         # Skip remotely cached jobs, but still consider
         # them for pushing if they are cached locally
