@@ -13,20 +13,28 @@ from nix_fast_build.upload import (
     UploadItem,
     UploadQueue,
     _chunk_args,
+    parse_path_info,
     run_upload_worker,
 )
 
-# --query --outputs maps X.drv -> X. --print-invalid reports "broken" paths.
-FAKE_NIX_STORE = """#!/usr/bin/env bash
-mode=$*
+
+def test_parse_path_info_nix_and_lix_formats() -> None:
+    new = '{"/nix/store/a":{"narSize":1},"/nix/store/b":null}'
+    lix = '[{"path":"/nix/store/a","valid":true},{"path":"/nix/store/b","valid":false}]'
+    assert parse_path_info(new) == {"/nix/store/a"}
+    assert parse_path_info(lix) == {"/nix/store/a"}
+
+
+# `nix path-info --json`: X.drv^* -> X, "broken" paths are invalid (null).
+FAKE_NIX = """#!/usr/bin/env bash
+sep="{"
 for p in "$@"; do
   [[ $p == /nix/store/* ]] || continue
-  case "$mode" in
-    *--outputs*) echo "${p%.drv}" ;;
-    *--print-invalid*) [[ $p == *broken* ]] && echo "$p" ;;
-  esac
+  p=${p%^*}; p=${p%.drv}
+  if [[ $p == *broken* ]]; then v=null; else v='{"narSize":1}'; fi
+  printf '%s"%s":%s' "$sep" "$p" "$v"; sep=","
 done
-exit 0
+echo "}"
 """
 
 
@@ -42,8 +50,8 @@ class RecordingUploader(Uploader):
 
 @pytest.fixture
 def fake_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / "nix-store").write_text(FAKE_NIX_STORE)
-    (tmp_path / "nix-store").chmod(0o755)
+    (tmp_path / "nix").write_text(FAKE_NIX)
+    (tmp_path / "nix").chmod(0o755)
     monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
 
 

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import shlex
@@ -77,8 +78,8 @@ async def _run_with_args(
     *,
     env: dict[str, str] | None = None,
     capture: bool = False,
-) -> tuple[int, str]:
-    """Run cmd with args appended, splitting into several invocations if needed."""
+) -> tuple[int, list[str]]:
+    """Run cmd with args appended, chunked below ARG_MAX; stdout per chunk."""
     rc = 0
     out: list[str] = []
     for chunk in _chunk_args(args):
@@ -96,7 +97,7 @@ async def _run_with_args(
         if proc.returncode != 0:
             rc = proc.returncode
         out.append((stdout or b"").decode())
-    return rc, "".join(out)
+    return rc, out
 
 
 @dataclass
@@ -171,29 +172,25 @@ class Niks3Uploader(Uploader):
         return [*nix_shell("github:Mic92/niks3", "niks3"), "push"], env
 
 
+def parse_path_info(stdout: str) -> set[str]:
+    """Valid paths from `nix path-info --json`: Nix >=2.19 emits an object
+    with null for invalid paths, older Nix and Lix a list with `valid`."""
+    data = json.loads(stdout)
+    if isinstance(data, dict):
+        return {p for p, info in data.items() if info is not None}
+    return {e["path"] for e in data if e.get("valid", True)}
+
+
 async def resolve_valid_outputs(paths: set[str], opts: Options) -> set[str]:
     """Resolve .drv paths to outputs and drop invalid ones (failed builds)."""
-    drvs = sorted(p for p in paths if p.endswith(".drv"))
-    outs = {p for p in paths if not p.endswith(".drv")}
-    if drvs:
-        rc, stdout = await _run_with_args(
-            ["nix-store", "--query", "--outputs"], drvs, opts, capture=True
-        )
-        if rc != 0:
-            logger.warning("nix-store --query --outputs failed (rc=%d)", rc)
-        outs.update(stdout.split())
-    if not outs:
-        return outs
-    rc, stdout = await _run_with_args(
-        ["nix-store", "--check-validity", "--print-invalid"],
-        sorted(outs),
-        opts,
-        capture=True,
+    args = sorted(f"{p}^*" if p.endswith(".drv") else p for p in paths)
+    cmd = opts.nix_command(
+        ["path-info", "--option", "substitute", "false", "--json", *opts.store_args]
     )
+    rc, outputs = await _run_with_args(cmd, args, opts, capture=True)
     if rc != 0:
-        logger.warning("nix-store --check-validity failed (rc=%d)", rc)
-        return outs
-    return outs - set(stdout.split())
+        logger.warning("nix path-info failed (rc=%d)", rc)
+    return set().union(*(parse_path_info(o) for o in outputs if o))
 
 
 def _drain(queue: UploadQueue, first: UploadItem) -> list[UploadItem]:
