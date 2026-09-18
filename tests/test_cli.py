@@ -340,7 +340,7 @@ def test_out_link_creates_result_symlinks(
         ["--cachix-cache", "c"],
         ["--attic-cache", "c"],
         ["--niks3-server", "https://x"],
-        ["--out-link", "my-result"],
+        ["--out-link", "my-result", "--no-download"],
         ["--option", "store", "ssh-ng://y"],
         ["--option", "eval-store", "local"],
         ["--option", "builders", "ssh://b"],
@@ -352,12 +352,19 @@ def test_store_conflicts(extra_args: list[str]) -> None:
     assert e.value.code == 2
 
 
-def test_store_ssh_ng(sshd: Sshd, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_store_ssh_ng(
+    sshd: Sshd, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     login = pwd.getpwuid(os.getuid()).pw_name
     monkeypatch.setenv(
         "NIX_SSHOPTS",
         f"-p {sshd.port} -i {sshd.key} "
         f"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
     )
-    rc = cli(["--store", f"ssh-ng://{login}@127.0.0.1"])
+    out_link = tmp_path / "res"
+    rc = cli(["--store", f"ssh-ng://{login}@127.0.0.1", "--out-link", str(out_link)])
     assert rc == 0
+    # results are copied back from the store, which is what creates the links
+    links = list(tmp_path.glob("res-*"))
+    assert links
+    assert all(link.resolve().exists() for link in links)

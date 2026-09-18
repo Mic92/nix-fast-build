@@ -102,6 +102,11 @@ class Options:
         return f"ssh://{self.remote}"
 
     @property
+    def download_from(self) -> str | None:
+        """Store that holds the build outputs when they are not local."""
+        return self.remote_url or self.store
+
+    @property
     def store_args(self) -> list[str]:
         """Extra args to point nix build/log at the build store."""
         if self.store is None:
@@ -346,8 +351,8 @@ async def parse_args(args: list[str]) -> Options:
         "--store",
         type=str,
         help="Nix store URL to build against (e.g. ssh-ng://host). "
-        "Evaluation stays local and only builds are dispatched. "
-        "Implies --builders ''. Conflicts with --out-link.",
+        "Evaluation stays local, only builds are dispatched, and results "
+        "are copied back unless --no-download. Implies --builders ''.",
     )
     parser.add_argument(
         "--remote",
@@ -362,7 +367,7 @@ async def parse_args(args: list[str]) -> Options:
     )
     parser.add_argument(
         "--no-download",
-        help="Do not download build results from remote machine",
+        help="Do not download build results from the --remote machine or --store",
         action="store_true",
         default=False,
     )
@@ -447,8 +452,8 @@ async def parse_args(args: list[str]) -> Options:
     # Determine evaluation mode
     eval_mode = EvalMode.EXPR if a.file is not None else EvalMode.FLAKE
 
-    # Validate: --store conflicts — outputs stay in the remote store,
-    # so local-store features and --remote cannot work alongside it.
+    # Validate: --store conflicts. Outputs are downloaded afterwards like
+    # with --remote, but uploaders run before that and would see nothing.
     if a.store:
         conflicts = [
             (a.remote, "--remote"),
@@ -456,7 +461,7 @@ async def parse_args(args: list[str]) -> Options:
             (a.cachix_cache, "--cachix-cache"),
             (a.attic_cache, "--attic-cache"),
             (a.niks3_server, "--niks3-server"),
-            (a.out_link is not None, "--out-link"),
+            (a.out_link is not None and a.no_download, "--out-link with --no-download"),
         ]
         for value, flag in conflicts:
             if value:

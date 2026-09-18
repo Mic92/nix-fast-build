@@ -113,7 +113,7 @@ class Build:
         return []
 
     async def download(self, exit_stack: AsyncExitStack, opts: Options) -> int:
-        if not opts.remote_url or not opts.download or not self.outputs:
+        if not opts.download_from or not opts.download or not self.outputs:
             return 0
         cmd = opts.nix_command(
             [
@@ -122,14 +122,15 @@ class Build:
                 "raw",
                 "--no-check-sigs",
                 "--from",
-                opts.remote_url,
+                opts.download_from,
                 *self.out_link_args(opts),
                 *list(self.outputs.values()),
             ]
         )
         logger.debug("run %s", shlex.join(cmd))
         env = os.environ.copy()
-        env["NIX_SSHOPTS"] = " ".join(opts.remote_ssh_options)
+        if opts.remote:
+            env["NIX_SSHOPTS"] = " ".join(opts.remote_ssh_options)
         proc = await asyncio.create_subprocess_exec(
             *cmd, env=env, stdout=sys.stderr.fileno()
         )
@@ -179,7 +180,7 @@ async def nix_build(
     )
     args += ["--log-format", "internal-json", "-v"]
     if opts.store is not None:
-        # outputs live in a remote store, a local out-link would dangle
+        # outputs live in a remote store, the link is created on download
         args += ["--no-link"]
     elif opts.out_link is not None and opts.remote is None:
         # with --remote the persistent link is created locally on download

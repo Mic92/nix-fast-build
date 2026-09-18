@@ -93,9 +93,10 @@ def start_renderer(stack: AsyncExitStack, opts: Options) -> CIRenderer | TTYRend
 async def run(stack: AsyncExitStack, opts: Options) -> int:
     if opts.remote:
         tmp_dir = await stack.enter_async_context(remote_temp_dir(opts))
-        opts.download_gcroot_dir = Path(stack.enter_context(TemporaryDirectory()))
     else:
         tmp_dir = Path(stack.enter_context(TemporaryDirectory()))
+    if opts.download_from:
+        opts.download_gcroot_dir = Path(stack.enter_context(TemporaryDirectory()))
 
     opts.build_gcroot_dir = tmp_dir
 
@@ -158,7 +159,7 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
     if opts.niks3_server:
         add_uploader(Niks3Uploader("niks3", ResultType.NIKS3, opts))
 
-    if opts.remote_url and opts.download:
+    if opts.download_from and opts.download:
         download_queue = BuildQueue()
         build_queues.append(download_queue)
         optional_queues.append(

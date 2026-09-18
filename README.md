@@ -114,9 +114,9 @@ nix run github:Mic92/nix-fast-build -- --store ssh-ng://youruser@yoursshhostname
 ```
 
 Unlike `--remote` (which runs the whole pipeline over SSH), `--store` uses the
-Nix store protocol only. Outputs stay in the remote store, so `--out-link`
-cannot be used. It cannot be combined with `--remote`, `--copy-to`, or upload
-flags.
+Nix store protocol only. Results are copied back into the local store when a
+build finishes (`--no-download` to leave them remote). It cannot be combined
+with `--remote`, `--copy-to`, or upload flags.
 
 ## Build Output
 
@@ -430,14 +430,16 @@ options:
                         prefix (e.g. 'result'). By default builds are only gc-
                         rooted for the duration of the run.
   --store STORE         Nix store URL to build against (e.g. ssh-ng://host).
-                        Evaluation stays local and only builds are dispatched.
-                        Implies --builders ''. Conflicts with --out-link.
+                        Evaluation stays local, only builds are dispatched,
+                        and results are copied back unless --no-download.
+                        Implies --builders ''.
   --remote REMOTE       Remote machine to build on
   --always-upload-source
                         Always upload sources to remote machine. This is
                         needed if the remote machine cannot access all sources
                         (default: false)
-  --no-download         Do not download build results from remote machine
+  --no-download         Do not download build results from the --remote
+                        machine or --store
   --skip-cached         Skip builds that are already present in the binary
                         cache (default: false)
   --copy-to COPY_TO     Copy build results to the given path (passed to nix
