@@ -176,7 +176,7 @@ async def nix_build(
     on_built: Callable[[str], None] | None = None,
 ) -> AsyncIterator[Process]:
     args = opts.nix_command(
-        ["build", f"{installable}^*", "--keep-going", *opts.options, *opts.store_args]
+        ["build", f"{installable}^*", "--keep-going", *opts.store_args]
     )
     args += ["--log-format", "internal-json", "-v"]
     if opts.store is not None:

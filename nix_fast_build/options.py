@@ -14,8 +14,16 @@ from .errors import Error
 logger = logging.getLogger(__name__)
 
 
-def _nix_command(nix_bin: list[str], args: list[str]) -> list[str]:
-    return [*nix_bin, "--experimental-features", "nix-command flakes", *args]
+def _nix_command(
+    nix_bin: list[str], args: list[str], nix_options: list[str] | None = None
+) -> list[str]:
+    return [
+        *nix_bin,
+        "--experimental-features",
+        "nix-command flakes",
+        *(nix_options or []),
+        *args,
+    ]
 
 
 class ResultFormat(enum.Enum):
@@ -93,7 +101,7 @@ class Options:
         return self.fail_fast and self._stop_event.is_set()
 
     def nix_command(self, args: list[str]) -> list[str]:
-        return _nix_command(self.nix_bin, args)
+        return _nix_command(self.nix_bin, args, self.options)
 
     @property
     def remote_url(self) -> str | None:
@@ -144,10 +152,15 @@ def nix_shell(fallback_package: str, wanted_command: str) -> list[str]:
 
 
 async def get_nix_config(
-    nix_bin: list[str], remote: str | None, remote_ssh_options: list[str]
+    nix_bin: list[str],
+    remote: str | None,
+    remote_ssh_options: list[str],
+    nix_options: list[str],
 ) -> dict[str, str]:
     args = _maybe_remote(
-        _nix_command(nix_bin, ["config", "show", "--json"]), remote, remote_ssh_options
+        _nix_command(nix_bin, ["config", "show", "--json"], nix_options),
+        remote,
+        remote_ssh_options,
     )
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -546,7 +559,7 @@ async def parse_args(args: list[str]) -> Options:
     nix_eval_jobs_bin = shlex.split(a.nix_eval_jobs)
     nix_build_bin = shlex.split(a.nix_build)
 
-    nix_config = await get_nix_config(nix_bin, a.remote, remote_ssh_options)
+    nix_config = await get_nix_config(nix_bin, a.remote, remote_ssh_options, options)
     if a.max_jobs is None:
         a.max_jobs = int(nix_config.get("max-jobs", 0))
     # The TTY renderer additionally requires stdin/stderr to be a

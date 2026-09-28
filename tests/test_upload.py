@@ -139,3 +139,18 @@ def test_failed_batch_falls_back_per_attr() -> None:
     ]
     assert {(r.attr, r.success) for r in results} == {("a", True), ("b", False)}
     assert up.pushed == {"/nix/store/a-out"}
+
+
+def test_nix_command_forwards_options() -> None:
+    opts = Options(options=["--option", "plugin-files", "/plugins"])
+    cmd = opts.nix_command(["path-info", "/nix/store/a"])
+    assert cmd == [
+        "nix",
+        "--experimental-features",
+        "nix-command flakes",
+        "--option",
+        "plugin-files",
+        "/plugins",
+        "path-info",
+        "/nix/store/a",
+    ]
