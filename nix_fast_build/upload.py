@@ -173,7 +173,7 @@ class Niks3Uploader(Uploader):
 
 
 def parse_path_info(stdout: str) -> set[str]:
-    """Valid paths from `nix path-info --json`: Nix >=2.19 emits an object
+    """Valid paths from `nix path-info --json-format 1`: Nix >=2.19 emits an object
     with null for invalid paths, older Nix and Lix a list with `valid`."""
     data = json.loads(stdout)
     if isinstance(data, dict):
@@ -185,7 +185,16 @@ async def resolve_valid_outputs(paths: set[str], opts: Options) -> set[str]:
     """Resolve .drv paths to outputs and drop invalid ones (failed builds)."""
     args = sorted(f"{p}^*" if p.endswith(".drv") else p for p in paths)
     cmd = opts.nix_command(
-        ["path-info", "--option", "substitute", "false", "--json", *opts.store_args]
+        [
+            "path-info",
+            "--option",
+            "substitute",
+            "false",
+            "--json",
+            "--json-format",
+            "1",
+            *opts.store_args,
+        ]
     )
     rc, outputs = await _run_with_args(cmd, args, opts, capture=True)
     if rc != 0:
