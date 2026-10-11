@@ -179,6 +179,16 @@ async def nix_build(
         ["build", f"{installable}^*", "--keep-going", *opts.store_args]
     )
     args += ["--log-format", "internal-json", "-v"]
+    if opts.dry_run:
+        args += ["--dry-run"]
+    if opts.repair:
+        args += ["--repair"]
+    if opts.rebuild:
+        args += ["--rebuild"]
+    if opts.offline:
+        args += ["--offline"]
+    if opts.refresh:
+        args += ["--refresh"]
     if opts.store is not None:
         # outputs live in a remote store, the link is created on download
         args += ["--no-link"]

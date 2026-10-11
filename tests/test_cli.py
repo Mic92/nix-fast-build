@@ -31,6 +31,11 @@ def test_build() -> None:
     assert rc == 0
 
 
+def test_build_dry_run() -> None:
+    rc = cli(["--option", "builders", "", "--dry-run"])
+    assert rc == 0
+
+
 def test_build_junit() -> None:
     with TemporaryDirectory() as d:
         path = Path(d) / "test.xml"
@@ -368,3 +373,22 @@ def test_store_ssh_ng(
     links = list(tmp_path.glob("res-*"))
     assert links
     assert all(link.resolve().exists() for link in links)
+
+
+def test_new_flags_parsing() -> None:
+    opts = asyncio.run(
+        parse_args(
+            [
+                "--dry-run",
+                "--repair",
+                "--rebuild",
+                "--offline",
+                "--refresh",
+            ]
+        )
+    )
+    assert opts.dry_run is True
+    assert opts.repair is True
+    assert opts.rebuild is True
+    assert opts.offline is True
+    assert opts.refresh is True
