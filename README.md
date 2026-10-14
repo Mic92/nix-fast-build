@@ -228,7 +228,7 @@ By default nix-fast-build will evaluate all systems in `.#checks`, you can limit
 it to the current system by using this command:
 
 ```console
-$ nix run github:Mic92/nix-fast-build -- --skip-cached --flake ".#checks.$(nix eval --raw --impure --file builtins.currentSystem)"
+$ nix run github:Mic92/nix-fast-build -- --skip-cached --flake ".#checks.$(nix eval --raw --impure --expr builtins.currentSystem)"
 ```
 
 ## Cachix support
