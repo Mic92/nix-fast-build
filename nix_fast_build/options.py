@@ -78,6 +78,11 @@ class Options:
     fail_fast: bool = False
     skip_unsupported: bool = False
     reference_lock_file: str | None = None
+    dry_run: bool = False
+    repair: bool = False
+    rebuild: bool = False
+    offline: bool = False
+    refresh: bool = False
 
     cachix_cache: str | None = None
 
@@ -182,7 +187,7 @@ async def get_nix_config(
     return config
 
 
-async def parse_args(args: list[str]) -> Options:
+def get_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
 
     # Binary paths (env vars as fallback for backward compatibility)
@@ -459,7 +464,41 @@ async def parse_args(args: list[str]) -> Options:
         default=False,
         help="Stop as soon as any build or evaluation fails, instead of continuing with remaining builds.",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Show what this command would do without doing it",
+    )
+    parser.add_argument(
+        "--repair",
+        action="store_true",
+        default=False,
+        help="During evaluation, rewrite missing or corrupted files in the Nix store. During building, rebuild missing or corrupted store paths.",
+    )
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        default=False,
+        help="Rebuild an already built package and compare the result to the existing store paths.",
+    )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        default=False,
+        help="Disable substituters and consider all previously downloaded files up-to-date.",
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        default=False,
+        help="Consider all previously downloaded files out-of-date.",
+    )
+    return parser
 
+
+async def parse_args(args: list[str]) -> Options:
+    parser = get_argument_parser()
     a = parser.parse_args(args)
 
     # Determine evaluation mode
@@ -611,4 +650,9 @@ async def parse_args(args: list[str]) -> Options:
         reference_lock_file=a.reference_lock_file,
         fail_fast=a.fail_fast,
         skip_unsupported=a.skip_unsupported,
+        dry_run=a.dry_run,
+        repair=a.repair,
+        rebuild=a.rebuild,
+        offline=a.offline,
+        refresh=a.refresh,
     )

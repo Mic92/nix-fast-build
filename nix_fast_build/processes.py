@@ -138,6 +138,8 @@ async def nix_eval_jobs(
         args.append(opts.expr_file)
     if opts.skip_cached:
         args.append("--check-cache-status")
+    if opts.repair:
+        args.append("--repair")
     if opts.remote:
         args = nix_shell("nixpkgs#nix-eval-jobs", "nix-eval-jobs") + args
     else:

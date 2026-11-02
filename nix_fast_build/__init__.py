@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 from .build import BuildQueue, JobQueue, OptionalQueue, StopTask
 from .ci_renderer import CIRenderer
 from .errors import Error
-from .options import EvalMode, Options, ResultFormat, parse_args
+from .options import EvalMode, Options, ResultFormat, get_argument_parser, parse_args
 from .processes import (
     nix_eval_jobs,
     read_eval_stderr_lines,
@@ -53,6 +53,7 @@ __all__ = [
     "ResultFormat",
     "ResultType",
     "async_main",
+    "get_argument_parser",
     "get_ci_summary_file",
     "main",
     "parse_args",
