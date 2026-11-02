@@ -25,8 +25,9 @@ def test_parse_path_info_nix_and_lix_formats() -> None:
     assert parse_path_info(lix) == {"/nix/store/a"}
 
 
-# `nix path-info --json`: X.drv^* -> X, "broken" paths are invalid (null).
+# `nix path-info --json-format 1`: X.drv^* -> X, "broken" paths are invalid (null).
 FAKE_NIX = """#!/usr/bin/env bash
+[[ " $* " == *" --json-format 1 "* ]] || exit 1
 sep="{"
 for p in "$@"; do
   [[ $p == /nix/store/* ]] || continue
