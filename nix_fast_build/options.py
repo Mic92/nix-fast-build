@@ -83,6 +83,8 @@ class Options:
 
     attic_cache: str | None = None
     attic_ignore_upstream_cache_filter: bool = False
+    celler_cache: str | None = None
+    celler_ignore_upstream_cache_filter: bool = False
     push_build_closure: bool = False
 
     niks3_server: str | None = None
@@ -300,8 +302,18 @@ async def parse_args(args: list[str]) -> Options:
         action="store_true",
     )
     parser.add_argument(
+        "--celler-cache",
+        help="Celler cache to upload to",
+        default=None,
+    )
+    parser.add_argument(
+        "--celler-ignore-upstream-cache-filter",
+        help="Pass --ignore-upstream-cache-filter to celler push, uploading all paths even if celler thinks they exist in an upstream cache (default: false)",
+        action="store_true",
+    )
+    parser.add_argument(
         "--push-build-closure",
-        help="Also push outputs of every intermediate derivation that was built (not substituted) while building an attribute to the configured caches (--copy-to/--cachix-cache/--attic-cache/--niks3-server), as soon as they finish. Useful for caching intermediate build products in ephemeral CI environments (default: false)",
+        help="Also push outputs of every intermediate derivation that was built (not substituted) while building an attribute to the configured caches (--copy-to/--cachix-cache/--attic-cache/--celler-cache/--niks3-server), as soon as they finish. Useful for caching intermediate build products in ephemeral CI environments (default: false)",
         action="store_true",
     )
     parser.add_argument(
@@ -473,6 +485,7 @@ async def parse_args(args: list[str]) -> Options:
             (a.copy_to, "--copy-to"),
             (a.cachix_cache, "--cachix-cache"),
             (a.attic_cache, "--attic-cache"),
+            (a.celler_cache, "--celler-cache"),
             (a.niks3_server, "--niks3-server"),
             (a.out_link is not None and a.no_download, "--out-link with --no-download"),
         ]
@@ -599,6 +612,8 @@ async def parse_args(args: list[str]) -> Options:
         cachix_cache=a.cachix_cache,
         attic_cache=a.attic_cache,
         attic_ignore_upstream_cache_filter=a.attic_ignore_upstream_cache_filter,
+        celler_cache=a.celler_cache,
+        celler_ignore_upstream_cache_filter=a.celler_ignore_upstream_cache_filter,
         push_build_closure=a.push_build_closure,
         niks3_server=a.niks3_server,
         store=a.store,
