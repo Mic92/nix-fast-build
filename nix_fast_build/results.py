@@ -9,6 +9,7 @@ class ResultType(enum.Enum):
     DOWNLOAD = enum.auto()
     CACHIX = enum.auto()
     ATTIC = enum.auto()
+    CELLER = enum.auto()
     NIKS3 = enum.auto()
 
 

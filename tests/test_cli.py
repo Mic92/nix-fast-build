@@ -339,6 +339,7 @@ def test_out_link_creates_result_symlinks(
         ["--copy-to", "file:///tmp/c"],
         ["--cachix-cache", "c"],
         ["--attic-cache", "c"],
+        ["--celler-cache", "c"],
         ["--niks3-server", "https://x"],
         ["--out-link", "my-result", "--no-download"],
         ["--option", "store", "ssh-ng://y"],
