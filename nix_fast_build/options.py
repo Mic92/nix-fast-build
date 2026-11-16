@@ -537,6 +537,9 @@ async def parse_args(args: list[str]) -> Options:
     parser = get_argument_parser()
     a = parser.parse_args(args)
 
+    if a.retries < 0:
+        parser.error("--retries must be non-negative")
+
     # Determine evaluation mode
     eval_mode = EvalMode.EXPR if a.file is not None else EvalMode.FLAKE
 
@@ -667,6 +670,7 @@ async def parse_args(args: list[str]) -> Options:
         options=options,
         remote_ssh_options=remote_ssh_options,
         max_jobs=a.max_jobs,
+        retries=a.retries,
         interactive=interactive,
         no_fold=a.no_fold,
         stall_timeout=a.stall_timeout,

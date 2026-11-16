@@ -4,7 +4,7 @@ import asyncio
 from contextlib import AsyncExitStack
 from pathlib import Path
 
-from nix_fast_build import Options
+from nix_fast_build import parse_args
 from nix_fast_build.build import Build, BuildResult
 
 
@@ -18,6 +18,7 @@ def run_build(tmp_path: Path, retries: int) -> tuple[BuildResult, int]:
     fake_nix.write_text(
         f"""#!/usr/bin/env bash
 case " $* " in
+  *" config show "*) echo '{{}}' ;;
   *" build "*) echo x >> {attempts}
                [ "$(wc -l < {attempts})" -ge 2 ] || exit 1 ;;
   *" log "*) echo "fake build log" ;;
@@ -27,16 +28,11 @@ esac
     fake_nix.chmod(0o755)
 
     async def go() -> BuildResult:
+        opts = await parse_args(["--nix", str(fake_nix), "--retries", str(retries)])
+        opts.build_gcroot_dir = tmp_path
         build = Build("hello", "/nix/store/fake.drv", {"out": "/nix/store/fake"})
         async with AsyncExitStack() as stack:
-            return await build.build(
-                stack,
-                Options(
-                    nix_bin=[str(fake_nix)],
-                    retries=retries,
-                    build_gcroot_dir=tmp_path,
-                ),
-            )
+            return await build.build(stack, opts)
         # Unreachable; mypy can't tell AsyncExitStack never suppresses here.
         raise AssertionError
 
