@@ -78,6 +78,9 @@ class Options:
     fail_fast: bool = False
     skip_unsupported: bool = False
     reference_lock_file: str | None = None
+    dry_run: bool = False
+    repair: bool = False
+    rebuild: bool = False
 
     cachix_cache: str | None = None
 
@@ -184,7 +187,7 @@ async def get_nix_config(
     return config
 
 
-async def parse_args(args: list[str]) -> Options:
+def get_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
 
     # Binary paths (env vars as fallback for backward compatibility)
@@ -471,7 +474,67 @@ async def parse_args(args: list[str]) -> Options:
         default=False,
         help="Stop as soon as any build or evaluation fails, instead of continuing with remaining builds.",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Show what this command would do without doing it",
+    )
+    parser.add_argument(
+        "--repair",
+        action="store_true",
+        default=False,
+        help="During evaluation, rewrite missing or corrupted files in the Nix store. During building, rebuild missing or corrupted store paths.",
+    )
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        default=False,
+        help="Rebuild an already built package and compare the result to the existing store paths.",
+    )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        default=False,
+        help="Disable substituters and consider all previously downloaded files up-to-date.",
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        default=False,
+        help="Consider all previously downloaded files out-of-date.",
+    )
+    return parser
 
+
+_TTL_FOREVER = str(2**32 - 1)
+
+
+def _implied_nix_options(*, offline: bool, refresh: bool) -> list[tuple[str, str]]:
+    """Settings behind nix's --offline/--refresh.
+
+    Those flags only exist in the `nix` CLI, but fetching and substituter
+    queries mostly happen in nix-eval-jobs, which only understands --option.
+    """
+    implied: list[tuple[str, str]] = []
+    if offline:
+        implied += [
+            ("substitute", "false"),
+            ("tarball-ttl", _TTL_FOREVER),
+            ("download-attempts", "0"),
+            ("connect-timeout", "1"),
+        ]
+    if refresh:
+        implied += [
+            ("tarball-ttl", "0"),
+            ("narinfo-cache-positive-ttl", "0"),
+            ("narinfo-cache-negative-ttl", "0"),
+        ]
+    return implied
+
+
+async def parse_args(args: list[str]) -> Options:
+    parser = get_argument_parser()
     a = parser.parse_args(args)
 
     # Determine evaluation mode
@@ -562,7 +625,11 @@ async def parse_args(args: list[str]) -> Options:
             expr_args.extend(["--include", path])
 
     options = []
-    for name, value in a.option:
+    # implied settings first so that an explicit --option overrides them
+    for name, value in [
+        *_implied_nix_options(offline=a.offline, refresh=a.refresh),
+        *a.option,
+    ]:
         options.extend(["--option", name, value])
     remote_ssh_options = []
     for name, value in a.remote_ssh_option:
@@ -626,4 +693,7 @@ async def parse_args(args: list[str]) -> Options:
         reference_lock_file=a.reference_lock_file,
         fail_fast=a.fail_fast,
         skip_unsupported=a.skip_unsupported,
+        dry_run=a.dry_run,
+        repair=a.repair,
+        rebuild=a.rebuild,
     )

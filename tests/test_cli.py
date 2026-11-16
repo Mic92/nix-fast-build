@@ -31,6 +31,11 @@ def test_build() -> None:
     assert rc == 0
 
 
+def test_build_dry_run() -> None:
+    rc = cli(["--option", "builders", "", "--dry-run"])
+    assert rc == 0
+
+
 def test_build_junit() -> None:
     with TemporaryDirectory() as d:
         path = Path(d) / "test.xml"
@@ -369,3 +374,10 @@ def test_store_ssh_ng(
     links = list(tmp_path.glob("res-*"))
     assert links
     assert all(link.resolve().exists() for link in links)
+
+
+def test_offline_is_overridable_for_all_nix_commands() -> None:
+    user = ["--option", "substitute", "true"]
+    opts = asyncio.run(parse_args(["--offline", *user]))
+    assert opts.options[:3] == ["--option", "substitute", "false"]
+    assert opts.options[-3:] == user
