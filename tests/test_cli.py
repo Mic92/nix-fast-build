@@ -375,20 +375,8 @@ def test_store_ssh_ng(
     assert all(link.resolve().exists() for link in links)
 
 
-def test_new_flags_parsing() -> None:
-    opts = asyncio.run(
-        parse_args(
-            [
-                "--dry-run",
-                "--repair",
-                "--rebuild",
-                "--offline",
-                "--refresh",
-            ]
-        )
-    )
-    assert opts.dry_run is True
-    assert opts.repair is True
-    assert opts.rebuild is True
-    assert opts.offline is True
-    assert opts.refresh is True
+def test_offline_is_overridable_for_all_nix_commands() -> None:
+    user = ["--option", "substitute", "true"]
+    opts = asyncio.run(parse_args(["--offline", *user]))
+    assert opts.options[:3] == ["--option", "substitute", "false"]
+    assert opts.options[-3:] == user

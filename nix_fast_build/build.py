@@ -185,10 +185,6 @@ async def nix_build(
         args += ["--repair"]
     if opts.rebuild:
         args += ["--rebuild"]
-    if opts.offline:
-        args += ["--offline"]
-    if opts.refresh:
-        args += ["--refresh"]
     if opts.store is not None:
         # outputs live in a remote store, the link is created on download
         args += ["--no-link"]
