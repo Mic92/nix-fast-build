@@ -164,6 +164,19 @@ class AtticUploader(Uploader):
 
 
 @dataclass
+class CellerUploader(Uploader):
+    reads_stdin = True
+
+    def command(self) -> tuple[list[str], dict[str, str] | None]:
+        assert self.opts.celler_cache is not None
+        args = [*nix_shell("github:celler-cache/celler", "celler"), "push", "--stdin"]
+        if self.opts.celler_ignore_upstream_cache_filter:
+            args.append("--ignore-upstream-cache-filter")
+        args.append(self.opts.celler_cache)
+        return args, None
+
+
+@dataclass
 class Niks3Uploader(Uploader):
     def command(self) -> tuple[list[str], dict[str, str] | None]:
         assert self.opts.niks3_server is not None

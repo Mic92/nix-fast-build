@@ -258,6 +258,22 @@ Authentication is not propagated to ssh when using the `--remote` flag, instead
 the user is expected that attic credentials are configured on the remote
 machine.
 
+## Celler support
+
+nix-fast-build can upload to [celler](https://github.com/celler-cache/celler)
+like this:
+
+```console
+$ nix-fast-build --celler-cache example
+```
+
+nix-fast-build assumes that your current machine is either logged in to celler,
+e.g. via `CELLER_TOKEN`.
+
+Authentication is not propagated to ssh when using the `--remote` flag, instead
+the user is expected that celler credentials are configured on the remote
+machine.
+
 ## Niks3 support
 
 nix-fast-build can upload to a [niks3](https://github.com/Mic92/niks3) server
@@ -276,10 +292,10 @@ remote machine (either at the default XDG path or via `NIKS3_AUTH_TOKEN_FILE`).
 ## Caching intermediate build products
 
 By default only the final outputs of each attribute are pushed to the configured
-caches (`--copy-to`, `--cachix-cache`, `--attic-cache`, `--niks3-server`). On
-ephemeral CI runners with an empty nix store this means intermediate derivations
-that are not part of the runtime closure (build hooks, wheels, vendored deps,
-...) are rebuilt on every run.
+caches (`--copy-to`, `--cachix-cache`, `--attic-cache`, `--celler-cache`,
+`--niks3-server`). On ephemeral CI runners with an empty nix store this means
+intermediate derivations that are not part of the runtime closure (build hooks,
+wheels, vendored deps, ...) are rebuilt on every run.
 
 With `--push-build-closure`, nix-fast-build additionally pushes the outputs of
 every derivation nix actually built locally (as opposed to substituted) as soon
@@ -350,12 +366,15 @@ usage: nix-fast-build [-h] [--nix NIX] [--nix-eval-jobs NIX_EVAL_JOBS]
                       [--cachix-cache CACHIX_CACHE]
                       [--attic-cache ATTIC_CACHE]
                       [--attic-ignore-upstream-cache-filter]
+                      [--celler-cache CELLER_CACHE]
+                      [--celler-ignore-upstream-cache-filter]
                       [--push-build-closure] [--niks3-server NIKS3_SERVER]
-                      [--no-nom] [--no-fold] [--stall-timeout STALL_TIMEOUT]
-                      [--systems SYSTEMS] [--retries RETRIES] [--no-link]
-                      [--out-link OUT_LINK] [--store STORE] [--remote REMOTE]
-                      [--always-upload-source] [--no-download] [--skip-cached]
-                      [--copy-to COPY_TO] [--debug]
+                      [--skip-unsupported] [--no-nom] [--no-fold]
+                      [--stall-timeout STALL_TIMEOUT] [--systems SYSTEMS]
+                      [--retries RETRIES] [--no-link] [--out-link OUT_LINK]
+                      [--store STORE] [--remote REMOTE]
+                      [--always-upload-source] [--no-download]
+                      [--skip-cached] [--copy-to COPY_TO] [--debug]
                       [--eval-max-memory-size EVAL_MAX_MEMORY_SIZE]
                       [--eval-workers EVAL_WORKERS]
                       [--result-file RESULT_FILE]
@@ -363,7 +382,7 @@ usage: nix-fast-build [-h] [--nix NIX] [--nix-eval-jobs NIX_EVAL_JOBS]
                       [--override-input input_path flake_url]
                       [--select NIX_FUNCTION]
                       [--reference-lock-file REFERENCE_LOCK_FILE]
-                      [--fail-fast] [--skip-unsupported]
+                      [--fail-fast]
 
 options:
   -h, --help            show this help message and exit
@@ -390,8 +409,8 @@ options:
   --pure                Enforce pure evaluation in --file mode (overrides the
                         default impure behavior)
   -j, --max-jobs MAX_JOBS
-                        Maximum number of build jobs to run in parallel (0 for
-                        unlimited)
+                        Maximum number of build jobs to run in parallel (0
+                        for unlimited)
   --option name value   Nix option to set
   --remote-ssh-option name value
                         ssh option when accessing remote
@@ -401,18 +420,27 @@ options:
                         Attic cache to upload to
   --attic-ignore-upstream-cache-filter
                         Pass --ignore-upstream-cache-filter to attic push,
-                        uploading all paths even if attic thinks they exist in
-                        an upstream cache (default: false)
+                        uploading all paths even if attic thinks they exist
+                        in an upstream cache (default: false)
+  --celler-cache CELLER_CACHE
+                        Celler cache to upload to
+  --celler-ignore-upstream-cache-filter
+                        Pass --ignore-upstream-cache-filter to celler push,
+                        uploading all paths even if celler thinks they exist
+                        in an upstream cache (default: false)
   --push-build-closure  Also push outputs of every intermediate derivation
                         that was built (not substituted) while building an
                         attribute to the configured caches (--copy-
-                        to/--cachix-cache/--attic-cache/--niks3-server), as
-                        soon as they finish. Useful for caching intermediate
-                        build products in ephemeral CI environments (default:
-                        false)
+                        to/--cachix-cache/--attic-cache/--celler-
+                        cache/--niks3-server), as soon as they finish. Useful
+                        for caching intermediate build products in ephemeral
+                        CI environments (default: false)
   --niks3-server NIKS3_SERVER
                         Niks3 server URL to upload to (auth from
                         ~/.config/niks3/auth-token or NIKS3_AUTH_TOKEN_FILE)
+  --skip-unsupported    Report attributes whose meta.platforms/badPlatforms
+                        exclude the evaluated system as skipped instead of
+                        failed
   --no-nom              Use the non-interactive log renderer even on a
                         terminal (historical name: it used to disable nix-
                         output-monitor)
@@ -421,14 +449,14 @@ options:
   --stall-timeout STALL_TIMEOUT
                         Seconds without build output before dumping its last
                         lines and streaming it live (default: 300)
-  --systems SYSTEMS     Space-separated list of systems to build for (default:
-                        current system)
+  --systems SYSTEMS     Space-separated list of systems to build for
+                        (default: current system)
   --retries RETRIES     Number of times to retry failed builds
   --no-link             Deprecated no-op: not creating out-links is now the
                         default
   --out-link OUT_LINK   Create persistent result symlinks with this name
-                        prefix (e.g. 'result'). By default builds are only gc-
-                        rooted for the duration of the run.
+                        prefix (e.g. 'result'). By default builds are only
+                        gc-rooted for the duration of the run.
   --store STORE         Nix store URL to build against (e.g. ssh-ng://host).
                         Evaluation stays local, only builds are dispatched,
                         and results are copied back unless --no-download.
@@ -436,8 +464,8 @@ options:
   --remote REMOTE       Remote machine to build on
   --always-upload-source
                         Always upload sources to remote machine. This is
-                        needed if the remote machine cannot access all sources
-                        (default: false)
+                        needed if the remote machine cannot access all
+                        sources (default: false)
   --no-download         Do not download build results from the --remote
                         machine or --store
   --skip-cached         Skip builds that are already present in the binary
@@ -469,9 +497,6 @@ options:
   --reference-lock-file REFERENCE_LOCK_FILE
                         Read the given lock file instead of `flake.lock`
                         within the top-level flake.
-  --fail-fast           Stop as soon as any build or evaluation fails, instead
-                        of continuing with remaining builds.
-  --skip-unsupported    Report attributes whose meta.platforms/badPlatforms
-                        exclude the evaluated system as skipped instead of
-                        failed
+  --fail-fast           Stop as soon as any build or evaluation fails,
+                        instead of continuing with remaining builds.
 ```

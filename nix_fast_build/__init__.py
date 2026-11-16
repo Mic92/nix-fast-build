@@ -32,6 +32,7 @@ from .tty_renderer import TTYRenderer
 from .upload import (
     AtticUploader,
     CachixUploader,
+    CellerUploader,
     Niks3Uploader,
     NixCopyUploader,
     Uploader,
@@ -156,6 +157,8 @@ async def run(stack: AsyncExitStack, opts: Options) -> int:
         )
     if opts.attic_cache:
         add_uploader(AtticUploader("attic", ResultType.ATTIC, opts))
+    if opts.celler_cache:
+        add_uploader(CellerUploader("celler", ResultType.CELLER, opts))
     if opts.niks3_server:
         add_uploader(Niks3Uploader("niks3", ResultType.NIKS3, opts))
 
